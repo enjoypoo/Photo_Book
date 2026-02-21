@@ -3,8 +3,9 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView, Image,
   StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform,
   ActivityIndicator, SafeAreaView, StatusBar, Animated,
-  Dimensions,
+  Keyboard,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -13,14 +14,12 @@ import uuid from 'react-native-uuid';
 import { Album, PhotoEntry, RootStackParamList, WeatherOption } from '../types';
 import { upsertAlbum, getAlbumById, saveImageLocally } from '../store/albumStore';
 import { COLORS, WEATHER_OPTIONS } from '../constants';
-import { getTodayISO, parseExifDate, toDateOnly } from '../utils/dateUtils';
+import { getTodayISO, parseExifDate, toDateOnly, formatDateKorean, formatDateTimeKorean } from '../utils/dateUtils';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'CreateAlbum'>;
 type Route = RouteProp<RootStackParamList, 'CreateAlbum'>;
 
-const { height: SCREEN_H } = Dimensions.get('window');
-
-/* ── 사진에서 EXIF 날짜 추출 ─────────────────────────────── */
+/* ── EXIF 날짜 추출 ─────────────────────────────────── */
 function getExifDate(asset: ImagePicker.ImagePickerAsset): string | null {
   try {
     const exif = (asset as any).exif;
@@ -33,31 +32,17 @@ function getExifDate(asset: ImagePicker.ImagePickerAsset): string | null {
   } catch { return null; }
 }
 
-/* ── 여러 사진 중 날짜 범위 계산 ──────────────────────────── */
+/* ── 날짜 범위 계산 ─────────────────────────────────── */
 function calcDateRange(photos: PhotoEntry[]): { date: string; dateEnd?: string } {
-  const dates = photos
-    .map(p => p.takenAt)
-    .filter(Boolean)
-    .map(s => new Date(s!).getTime())
-    .filter(n => !isNaN(n));
+  const dates = photos.map(p => p.takenAt).filter(Boolean)
+    .map(s => new Date(s!).getTime()).filter(n => !isNaN(n));
   if (dates.length === 0) return { date: getTodayISO() };
-  const minT = Math.min(...dates);
-  const maxT = Math.max(...dates);
-  const minDate = new Date(minT);
-  const maxDate = new Date(maxT);
-  const minStr = minDate.toISOString();
-  const maxStr = maxDate.toISOString();
+  const minStr = new Date(Math.min(...dates)).toISOString();
+  const maxStr = new Date(Math.max(...dates)).toISOString();
   const sameDay = toDateOnly(minStr) === toDateOnly(maxStr);
-  if (photos.length === 1) {
-    // 1장: 날짜+시간 포함
-    return { date: minStr };
-  }
-  if (sameDay) {
-    // 여러 장이지만 같은 날 → 날짜만
-    return { date: toDateOnly(minStr) };
-  }
-  // 기간
-  return { date: toDateOnly(minStr), dateEnd: toDateOnly(maxStr) };
+  if (photos.length === 1) return { date: minStr };          // 1장: 날짜+시간
+  if (sameDay)              return { date: toDateOnly(minStr) }; // 같은 날
+  return { date: toDateOnly(minStr), dateEnd: toDateOnly(maxStr) }; // 기간
 }
 
 export default function CreateAlbumScreen() {
@@ -67,7 +52,7 @@ export default function CreateAlbumScreen() {
   const isEdit = !!albumId;
 
   const [title, setTitle] = useState('');
-  const [date, setDate] = useState(getTodayISO());
+  const [date, setDate] = useState(getTodayISO());          // YYYY-MM-DD or ISO
   const [dateEnd, setDateEnd] = useState<string | undefined>();
   const [location, setLocation] = useState('');
   const [weather, setWeather] = useState<WeatherOption>(WEATHER_OPTIONS[0]);
@@ -77,12 +62,19 @@ export default function CreateAlbumScreen() {
   const [captionModal, setCaptionModal] = useState({ visible: false, photoId: '', text: '' });
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exifApplied, setExifApplied] = useState(false);
 
-  // 사진 추가 BottomSheet
+  // DateTimePicker 상태
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [pickerDate, setPickerDate] = useState(new Date());
+
+  // 사진 BottomSheet 애니메이션
   const [photoSheetVisible, setPhotoSheetVisible] = useState(false);
   const sheetAnim = useRef(new Animated.Value(0)).current;
 
   const showPhotoSheet = () => {
+    Keyboard.dismiss();
     setPhotoSheetVisible(true);
     Animated.spring(sheetAnim, { toValue: 1, damping: 20, useNativeDriver: true }).start();
   };
@@ -96,8 +88,7 @@ export default function CreateAlbumScreen() {
     if (isEdit && albumId) {
       getAlbumById(albumId).then(album => {
         if (!album) return;
-        setTitle(album.title); setDate(album.date);
-        setDateEnd(album.dateEnd);
+        setTitle(album.title); setDate(album.date); setDateEnd(album.dateEnd);
         setLocation(album.location); setStory(album.story); setPhotos(album.photos);
         const w = WEATHER_OPTIONS.find(o => o.type === album.weather) ?? WEATHER_OPTIONS[0];
         setWeather(w);
@@ -106,16 +97,50 @@ export default function CreateAlbumScreen() {
     }
   }, [albumId]);
 
-  /* ── 사진 선택 후 EXIF 날짜 자동 반영 ─────────────────── */
+  /* ── 날짜 표시 문자열 ─────────────────────────────── */
+  const dateDisplayStr = (): string => {
+    try {
+      if (date.includes('T')) {
+        // 1장 사진, 시간 포함
+        return formatDateTimeKorean(date);
+      }
+      return formatDateKorean(date);
+    } catch { return date; }
+  };
+
+  const endDateDisplayStr = (): string => {
+    if (!dateEnd) return '';
+    try { return formatDateKorean(dateEnd); } catch { return dateEnd; }
+  };
+
+  /* ── DateTimePicker 핸들러 ──────────────────────── */
+  const onDateChange = (_: DateTimePickerEvent, selected?: Date) => {
+    setShowDatePicker(false);
+    if (!selected) return;
+    // 기존에 시간 포함이었으면 시간 유지, 아니면 날짜만
+    if (date.includes('T')) {
+      const old = new Date(date);
+      selected.setHours(old.getHours(), old.getMinutes(), old.getSeconds());
+      setDate(selected.toISOString());
+    } else {
+      setDate(selected.toISOString().split('T')[0]);
+    }
+  };
+
+  const onEndDateChange = (_: DateTimePickerEvent, selected?: Date) => {
+    setShowEndDatePicker(false);
+    if (!selected) return;
+    setDateEnd(selected.toISOString().split('T')[0]);
+  };
+
+  /* ── 사진 추가 (EXIF 날짜 자동 적용) ─────────────── */
   const applyPhotosWithExif = (newPhotos: PhotoEntry[], allPhotos: PhotoEntry[]) => {
     const merged = [...allPhotos, ...newPhotos];
     setPhotos(merged);
-    // EXIF 날짜가 하나라도 있으면 자동으로 날짜 업데이트
     const hasExif = merged.some(p => p.takenAt);
     if (hasExif) {
       const { date: d, dateEnd: de } = calcDateRange(merged);
-      setDate(d);
-      setDateEnd(de);
+      setDate(d); setDateEnd(de); setExifApplied(true);
     }
   };
 
@@ -152,8 +177,9 @@ export default function CreateAlbumScreen() {
     }
   };
 
-  /* ── 위치: 도>시>동 순서 ───────────────────────────────── */
+  /* ── 위치 자동 감지 (도>시>동 순서) ──────────────── */
   const detectLocation = async () => {
+    Keyboard.dismiss();
     setLoadingLocation(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -163,7 +189,6 @@ export default function CreateAlbumScreen() {
         latitude: loc.coords.latitude, longitude: loc.coords.longitude,
       });
       if (addr) {
-        // 한국 주소: 도(region) > 시(city) > 동/구(district) 순서
         const parts = [addr.region, addr.city, addr.district].filter(Boolean);
         setLocation(parts.join(' '));
       }
@@ -171,23 +196,22 @@ export default function CreateAlbumScreen() {
     finally { setLoadingLocation(false); }
   };
 
+  /* ── 저장 ─────────────────────────────────────── */
   const handleSave = async () => {
     if (!title.trim()) { Alert.alert('알림', '제목을 입력해주세요.'); return; }
+    Keyboard.dismiss();
     setSaving(true);
     try {
       const now = new Date().toISOString();
       const albumIdFinal = albumId ?? (uuid.v4() as string);
-      const savedPhotos: PhotoEntry[] = await Promise.all(
+      const savedPhotos = await Promise.all(
         photos.map(async p => {
-          try {
-            const localUri = await saveImageLocally(p.uri, albumIdFinal, p.id);
-            return { ...p, uri: localUri };
-          } catch { return p; }
+          try { return { ...p, uri: await saveImageLocally(p.uri, albumIdFinal, p.id) }; }
+          catch { return p; }
         })
       );
       const album: Album = {
-        id: albumIdFinal, childId, title: title.trim(), date,
-        dateEnd,
+        id: albumIdFinal, childId, title: title.trim(), date, dateEnd,
         location: location.trim(),
         weather: weather.type, weatherEmoji: weather.emoji,
         weatherCustom: weather.type === 'other' ? weatherCustom.trim() : undefined,
@@ -199,15 +223,13 @@ export default function CreateAlbumScreen() {
     } finally { setSaving(false); }
   };
 
-  const sheetTranslateY = sheetAnim.interpolate({
-    inputRange: [0, 1], outputRange: [300, 0],
-  });
+  const sheetTranslateY = sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [300, 0] });
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-      {/* ── 헤더 (피그마: 흰 배경, 56px) ── */}
+      {/* ── 헤더 ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBack}>
           <Text style={styles.headerBackText}>←</Text>
@@ -215,11 +237,9 @@ export default function CreateAlbumScreen() {
         <Text style={styles.headerTitle}>{isEdit ? '앨범 수정' : '새 앨범 만들기'}</Text>
         <TouchableOpacity
           style={[styles.headerDoneBtn, (!title.trim() || saving) && styles.headerDoneBtnDisabled]}
-          onPress={handleSave}
-          disabled={!title.trim() || saving}
+          onPress={handleSave} disabled={!title.trim() || saving}
         >
-          {saving
-            ? <ActivityIndicator size="small" color="#fff" />
+          {saving ? <ActivityIndicator size="small" color="#fff" />
             : <Text style={styles.headerDoneText}>완료</Text>}
         </TouchableOpacity>
       </View>
@@ -229,8 +249,8 @@ export default function CreateAlbumScreen() {
           contentContainerStyle={styles.body}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"   // ← 스크롤 시 키보드 자동 닫기
         >
-
           {/* ── 제목 ── */}
           <Text style={styles.label}>앨범 제목 *</Text>
           <TextInput
@@ -238,40 +258,53 @@ export default function CreateAlbumScreen() {
             placeholder="예: 첫 돌잔치, 가족 여행"
             placeholderTextColor={COLORS.textMuted}
             value={title} onChangeText={setTitle} maxLength={50}
+            returnKeyType="done" onSubmitEditing={Keyboard.dismiss}
           />
 
-          {/* ── 날짜 ── */}
+          {/* ── 날짜 (달력 선택) ── */}
           <Text style={styles.label}>날짜 *</Text>
           <View style={styles.dateRow}>
-            <View style={[styles.input, styles.dateInput]}>
+            <TouchableOpacity
+              style={[styles.input, styles.dateBtn]}
+              onPress={() => { Keyboard.dismiss(); setPickerDate(new Date(date.split('T')[0])); setShowDatePicker(true); }}
+            >
               <Text style={styles.dateIcon}>📅</Text>
-              <TextInput
-                style={styles.dateText}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={COLORS.textMuted}
-                value={date.split('T')[0]} // 날짜 부분만 표시
-                onChangeText={v => setDate(v)}
-                keyboardType="numeric" maxLength={10}
-              />
-            </View>
+              <Text style={styles.dateBtnText}>{dateDisplayStr()}</Text>
+            </TouchableOpacity>
             {dateEnd && (
               <>
                 <Text style={styles.dateSeparator}>~</Text>
-                <View style={[styles.input, styles.dateInput, { flex: 1 }]}>
-                  <TextInput
-                    style={styles.dateText}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={COLORS.textMuted}
-                    value={dateEnd}
-                    onChangeText={setDateEnd}
-                    keyboardType="numeric" maxLength={10}
-                  />
-                </View>
+                <TouchableOpacity
+                  style={[styles.input, styles.dateBtnEnd]}
+                  onPress={() => { Keyboard.dismiss(); setPickerDate(new Date(dateEnd)); setShowEndDatePicker(true); }}
+                >
+                  <Text style={styles.dateBtnText}>{endDateDisplayStr()}</Text>
+                </TouchableOpacity>
               </>
             )}
           </View>
-          {photos.some(p => p.takenAt) && (
+          {exifApplied && (
             <Text style={styles.exifNote}>📷 사진 촬영 날짜가 자동으로 적용되었습니다</Text>
+          )}
+
+          {/* iOS DateTimePicker는 모달로, Android는 인라인으로 */}
+          {showDatePicker && (
+            <DateTimePicker
+              value={pickerDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={onDateChange}
+              maximumDate={new Date()}
+            />
+          )}
+          {showEndDatePicker && (
+            <DateTimePicker
+              value={pickerDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={onEndDateChange}
+              maximumDate={new Date()}
+            />
           )}
 
           {/* ── 위치 ── */}
@@ -282,23 +315,22 @@ export default function CreateAlbumScreen() {
               placeholder="예: 서울 한강공원"
               placeholderTextColor={COLORS.textMuted}
               value={location} onChangeText={setLocation}
+              returnKeyType="done" onSubmitEditing={Keyboard.dismiss}
             />
             <TouchableOpacity style={styles.gpsBtn} onPress={detectLocation} disabled={loadingLocation}>
-              {loadingLocation
-                ? <ActivityIndicator size="small" color={COLORS.pink} />
-                : <Text style={styles.gpsBtnText}>📍</Text>
-              }
+              {loadingLocation ? <ActivityIndicator size="small" color={COLORS.pink} />
+                : <Text style={styles.gpsBtnText}>📍</Text>}
             </TouchableOpacity>
           </View>
 
           {/* ── 날씨 ── */}
-          <Text style={styles.label}>날씨</Text>
+          <Text style={[styles.label, { marginTop: 20 }]}>날씨</Text>
           <View style={styles.weatherGrid}>
             {WEATHER_OPTIONS.map(w => (
               <TouchableOpacity
                 key={w.type}
                 style={[styles.weatherChip, weather.type === w.type && styles.weatherChipActive]}
-                onPress={() => setWeather(w)}
+                onPress={() => { Keyboard.dismiss(); setWeather(w); }}
               >
                 <Text style={styles.weatherEmoji}>{w.emoji}</Text>
                 <Text style={[styles.weatherLabel, weather.type === w.type && styles.weatherLabelActive]}>
@@ -307,20 +339,18 @@ export default function CreateAlbumScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          {/* 기타 입력 */}
           {weather.type === 'other' && (
             <TextInput
               style={[styles.input, { marginTop: 8 }]}
               placeholder="날씨를 직접 입력하세요 (예: 따뜻한 봄날)"
               placeholderTextColor={COLORS.textMuted}
-              value={weatherCustom}
-              onChangeText={setWeatherCustom}
-              maxLength={30}
+              value={weatherCustom} onChangeText={setWeatherCustom} maxLength={30}
+              returnKeyType="done" onSubmitEditing={Keyboard.dismiss}
             />
           )}
 
           {/* ── 이야기 ── */}
-          <Text style={[styles.label, { marginTop: 4 }]}>앨범 이야기</Text>
+          <Text style={[styles.label, { marginTop: 20 }]}>앨범 이야기</Text>
           <TextInput
             style={[styles.input, styles.storyInput]}
             placeholder="이 날의 추억을 적어보세요..."
@@ -331,7 +361,7 @@ export default function CreateAlbumScreen() {
           <Text style={styles.charCount}>{story.length}/1000</Text>
 
           {/* ── 사진 추가 (피그마 PhotoUploader 스타일) ── */}
-          <Text style={[styles.label, { marginTop: 4 }]}>사진</Text>
+          <Text style={[styles.label, { marginTop: 20 }]}>사진</Text>
           <TouchableOpacity style={styles.photoUploaderBox} onPress={showPhotoSheet}>
             <Text style={styles.photoUploaderIcon}>🖼️</Text>
             <Text style={styles.photoUploaderTitle}>사진 추가하기</Text>
@@ -345,35 +375,23 @@ export default function CreateAlbumScreen() {
               {photos.map((photo, idx) => (
                 <View key={photo.id} style={styles.photoCard}>
                   <Image source={{ uri: photo.uri }} style={styles.photoImg} />
-                  {/* 순번 배지 */}
-                  <View style={styles.photoNum}>
-                    <Text style={styles.photoNumText}>{idx + 1}</Text>
-                  </View>
-                  {/* 삭제 버튼 */}
-                  <TouchableOpacity
-                    style={styles.photoDelete}
+                  <View style={styles.photoNum}><Text style={styles.photoNumText}>{idx + 1}</Text></View>
+                  <TouchableOpacity style={styles.photoDelete}
                     onPress={() => Alert.alert('삭제', '이 사진을 삭제할까요?', [
                       { text: '취소', style: 'cancel' },
-                      {
-                        text: '삭제', style: 'destructive',
-                        onPress: () => {
-                          const updated = photos.filter(p => p.id !== photo.id);
-                          setPhotos(updated);
-                          // 사진 줄면 날짜 재계산
-                          const hasExif = updated.some(p => p.takenAt);
-                          if (hasExif) {
-                            const { date: d, dateEnd: de } = calcDateRange(updated);
-                            setDate(d); setDateEnd(de);
-                          } else if (updated.length === 0) {
-                            setDate(getTodayISO()); setDateEnd(undefined);
-                          }
-                        },
-                      },
-                    ])}
-                  >
+                      { text: '삭제', style: 'destructive', onPress: () => {
+                        const updated = photos.filter(p => p.id !== photo.id);
+                        setPhotos(updated);
+                        if (updated.some(p => p.takenAt)) {
+                          const { date: d, dateEnd: de } = calcDateRange(updated);
+                          setDate(d); setDateEnd(de);
+                        } else if (updated.length === 0) {
+                          setDate(getTodayISO()); setDateEnd(undefined); setExifApplied(false);
+                        }
+                      }},
+                    ])}>
                     <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>✕</Text>
                   </TouchableOpacity>
-                  {/* EXIF 날짜 표시 */}
                   {photo.takenAt && (
                     <View style={styles.photoExifBadge}>
                       <Text style={styles.photoExifText}>
@@ -381,14 +399,9 @@ export default function CreateAlbumScreen() {
                       </Text>
                     </View>
                   )}
-                  {/* 캡션 */}
-                  <TouchableOpacity
-                    style={styles.captionBtn}
-                    onPress={() => setCaptionModal({ visible: true, photoId: photo.id, text: photo.caption })}
-                  >
-                    <Text style={styles.captionBtnText}>
-                      {photo.caption ? '✏️ 캡션 수정' : '+ 캡션 추가'}
-                    </Text>
+                  <TouchableOpacity style={styles.captionBtn}
+                    onPress={() => setCaptionModal({ visible: true, photoId: photo.id, text: photo.caption })}>
+                    <Text style={styles.captionBtnText}>{photo.caption ? '✏️ 캡션 수정' : '+ 캡션 추가'}</Text>
                   </TouchableOpacity>
                   {photo.caption ? (
                     <View style={styles.captionPreview}>
@@ -400,18 +413,14 @@ export default function CreateAlbumScreen() {
             </View>
           )}
 
-          {/* 저장 버튼 (피그마: 그라디언트 pill 버튼) */}
+          {/* ── 저장 버튼 ── */}
           <View style={styles.saveSection}>
             <TouchableOpacity
               style={[styles.saveBigBtn, (!title.trim() || saving) && styles.saveBigBtnDisabled]}
-              onPress={handleSave}
-              disabled={!title.trim() || saving}
-              activeOpacity={0.85}
+              onPress={handleSave} disabled={!title.trim() || saving} activeOpacity={0.85}
             >
-              {saving
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={styles.saveBigBtnText}>앨범 저장하기</Text>
-              }
+              {saving ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.saveBigBtnText}>앨범 저장하기</Text>}
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -420,14 +429,10 @@ export default function CreateAlbumScreen() {
       {/* ── 사진 추가 BottomSheet ── */}
       {photoSheetVisible && (
         <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={hidePhotoSheet}>
-          <Animated.View
-            style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}
-          >
+          <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
             <TouchableOpacity activeOpacity={1}>
               <View style={styles.sheetHandle} />
               <Text style={styles.sheetTitle}>사진 추가</Text>
-
-              {/* 카메라 */}
               <TouchableOpacity style={styles.sheetRow} onPress={takePhoto}>
                 <View style={[styles.sheetIconBox, { backgroundColor: '#EFF6FF' }]}>
                   <Text style={styles.sheetIconText}>📷</Text>
@@ -437,8 +442,6 @@ export default function CreateAlbumScreen() {
                   <Text style={styles.sheetRowSub}>새로운 사진 찍기</Text>
                 </View>
               </TouchableOpacity>
-
-              {/* 갤러리 */}
               <TouchableOpacity style={styles.sheetRow} onPress={pickImages}>
                 <View style={[styles.sheetIconBox, { backgroundColor: COLORS.purplePastel }]}>
                   <Text style={styles.sheetIconText}>🖼️</Text>
@@ -454,10 +457,8 @@ export default function CreateAlbumScreen() {
       )}
 
       {/* ── 캡션 모달 ── */}
-      <Modal
-        visible={captionModal.visible} transparent animationType="slide"
-        onRequestClose={() => setCaptionModal({ ...captionModal, visible: false })}
-      >
+      <Modal visible={captionModal.visible} transparent animationType="slide"
+        onRequestClose={() => setCaptionModal({ ...captionModal, visible: false })}>
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalBox}>
             <Text style={styles.modalTitle}>📝 사진 캡션</Text>
@@ -493,51 +494,39 @@ export default function CreateAlbumScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-
-  /* 헤더 */
   header: {
     height: 56, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', paddingHorizontal: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
   },
   headerBack: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerBackText: { fontSize: 24, color: COLORS.text },
   headerTitle: { fontSize: 17, fontWeight: '600', color: COLORS.text },
-  headerDoneBtn: {
-    backgroundColor: COLORS.purple, borderRadius: 20,
-    paddingHorizontal: 16, paddingVertical: 7,
-  },
+  headerDoneBtn: { backgroundColor: COLORS.purple, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 7 },
   headerDoneBtnDisabled: { opacity: 0.4 },
   headerDoneText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-
-  /* 폼 바디 */
   body: { padding: 20, paddingBottom: 40, backgroundColor: '#fff' },
-  label: { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 8, marginTop: 20 },
+  label: { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 8 },
   input: {
     backgroundColor: '#fff', borderRadius: 12, borderWidth: 2, borderColor: '#E5E7EB',
-    paddingHorizontal: 16, paddingVertical: 13, fontSize: 15, color: COLORS.text, marginBottom: 0,
+    paddingHorizontal: 16, paddingVertical: 13, fontSize: 15, color: COLORS.text,
   },
-
-  /* 날짜 행 */
+  /* 날짜 */
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dateInput: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 13 },
+  dateBtnEnd: { flex: 1, paddingVertical: 13 },
   dateIcon: { fontSize: 16 },
-  dateText: { flex: 1, fontSize: 15, color: COLORS.text },
+  dateBtnText: { flex: 1, fontSize: 14, color: COLORS.text },
   dateSeparator: { fontSize: 16, color: COLORS.textMuted, fontWeight: '500' },
-  exifNote: {
-    fontSize: 12, color: COLORS.purple, marginTop: 6, fontWeight: '500',
-  },
-
-  /* 위치 행 */
+  exifNote: { fontSize: 12, color: COLORS.purple, marginTop: 6, fontWeight: '500' },
+  /* 위치 */
   rowInput: { flexDirection: 'row', gap: 8 },
   gpsBtn: {
     width: 52, height: 52, borderRadius: 12, backgroundColor: '#fff',
     borderWidth: 2, borderColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center',
   },
   gpsBtnText: { fontSize: 22 },
-
-  /* 날씨 그리드 (3열) */
+  /* 날씨 */
   weatherGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   weatherChip: {
     width: '30%', alignItems: 'center', paddingVertical: 12, borderRadius: 16,
@@ -547,12 +536,10 @@ const styles = StyleSheet.create({
   weatherEmoji: { fontSize: 24, marginBottom: 4 },
   weatherLabel: { fontSize: 11, color: COLORS.textSecondary, fontWeight: '600' },
   weatherLabelActive: { color: COLORS.purple },
-
   /* 이야기 */
   storyInput: { minHeight: 120, paddingTop: 13, marginBottom: 0 },
   charCount: { fontSize: 11, color: COLORS.textMuted, textAlign: 'right', marginTop: 4 },
-
-  /* 사진 업로더 박스 (피그마 스타일) */
+  /* 사진 업로더 */
   photoUploaderBox: {
     width: '100%', height: 160,
     borderWidth: 2, borderStyle: 'dashed', borderColor: COLORS.purple,
@@ -562,14 +549,11 @@ const styles = StyleSheet.create({
   photoUploaderIcon: { fontSize: 44, marginBottom: 8 },
   photoUploaderTitle: { fontSize: 16, color: COLORS.purple, fontWeight: '600' },
   photoUploaderSub: { fontSize: 13, color: COLORS.textMuted, marginTop: 4 },
-
-  /* 사진 목록 */
   photoListTitle: { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 12 },
   photoCard: {
-    backgroundColor: '#fff', borderRadius: 20, overflow: 'hidden',
-    marginBottom: 16, borderWidth: 1, borderColor: '#F3F4F6',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+    backgroundColor: '#fff', borderRadius: 20, overflow: 'hidden', marginBottom: 16,
+    borderWidth: 1, borderColor: '#F3F4F6',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
   },
   photoImg: { width: '100%', height: 224, resizeMode: 'cover' },
   photoNum: {
@@ -582,7 +566,7 @@ const styles = StyleSheet.create({
     borderRadius: 16, backgroundColor: COLORS.danger, alignItems: 'center', justifyContent: 'center',
   },
   photoExifBadge: {
-    position: 'absolute', bottom: 60, left: 10,
+    position: 'absolute', bottom: 64, left: 10,
     backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12,
     paddingHorizontal: 10, paddingVertical: 4,
   },
@@ -599,12 +583,8 @@ const styles = StyleSheet.create({
     padding: 10, borderLeftWidth: 3, borderLeftColor: COLORS.pink,
   },
   captionPreviewText: { fontSize: 13, color: COLORS.text, lineHeight: 18, fontStyle: 'italic' },
-
-  /* 저장 버튼 */
-  saveSection: {
-    marginTop: 24, paddingTop: 16,
-    borderTopWidth: 1, borderTopColor: '#F3F4F6',
-  },
+  /* 저장 */
+  saveSection: { marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
   saveBigBtn: {
     backgroundColor: COLORS.purple, borderRadius: 24,
     paddingVertical: 16, alignItems: 'center',
@@ -613,7 +593,6 @@ const styles = StyleSheet.create({
   },
   saveBigBtnDisabled: { opacity: 0.45 },
   saveBigBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-
   /* BottomSheet */
   sheetOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
@@ -623,28 +602,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28,
     padding: 20, paddingBottom: 36,
   },
-  sheetHandle: {
-    width: 40, height: 4, backgroundColor: '#E5E7EB',
-    borderRadius: 2, alignSelf: 'center', marginBottom: 16,
-  },
+  sheetHandle: { width: 40, height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   sheetTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text, marginBottom: 20 },
   sheetRow: {
     flexDirection: 'row', alignItems: 'center', gap: 16,
     backgroundColor: '#F9FAFB', borderRadius: 20, padding: 16, marginBottom: 12,
   },
-  sheetIconBox: {
-    width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
-  },
+  sheetIconBox: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   sheetIconText: { fontSize: 26 },
   sheetRowTitle: { fontSize: 15, fontWeight: '600', color: COLORS.text },
   sheetRowSub: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
-
   /* 모달 */
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalBox: {
-    backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 24, paddingBottom: 36,
-  },
+  modalBox: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 36 },
   modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 16 },
   modalInput: {
     backgroundColor: COLORS.bgPink, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E7EB',
@@ -652,12 +622,6 @@ const styles = StyleSheet.create({
     minHeight: 100, textAlignVertical: 'top',
   },
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 16 },
-  modalCancel: {
-    flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 2,
-    borderColor: '#E5E7EB', alignItems: 'center',
-  },
-  modalSave: {
-    flex: 1, paddingVertical: 14, borderRadius: 14,
-    backgroundColor: COLORS.purple, alignItems: 'center',
-  },
+  modalCancel: { flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 2, borderColor: '#E5E7EB', alignItems: 'center' },
+  modalSave: { flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: COLORS.purple, alignItems: 'center' },
 });

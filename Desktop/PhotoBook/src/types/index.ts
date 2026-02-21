@@ -1,5 +1,7 @@
 export type WeatherType = 'sunny'|'partly_cloudy'|'cloudy'|'rainy'|'snowy'|'windy'|'hot'|'cold'|'other';
 
+export type GroupType = 'parent'|'friend'|'child'|'work'|'club'|'other';
+
 export interface WeatherOption {
   type: WeatherType;
   emoji: string;
@@ -17,7 +19,7 @@ export interface PhotoEntry {
 
 export interface Album {
   id: string;
-  childId: string;    // 어느 아이의 앨범인지
+  childId: string;    // 어느 그룹의 앨범인지
   title: string;
   date: string;       // YYYY-MM-DD (또는 YYYY-MM-DDTHH:mm:ss 1장일 때)
   dateEnd?: string;   // 여러 장이고 날짜가 다를 때 끝 날짜 YYYY-MM-DD
@@ -34,10 +36,13 @@ export interface Album {
 
 export interface Child {
   id: string;
-  name: string;
-  emoji: string;       // 아이 대표 이모지
-  color: string;       // 앨범 색상 테마
-  birthDate?: string;
+  name: string;           // 그룹명
+  emoji: string;          // 대표 이모지 (photoUri 없을 때 표시)
+  photoUri?: string;      // 대표 이미지 URI
+  color: string;          // 테마 색상
+  groupType: GroupType;   // 그룹 구분
+  groupTypeCustom?: string; // 기타 구분 직접 입력
+  birthDate?: string;     // 생성일(선택)
   createdAt: string;
 }
 
@@ -48,6 +53,7 @@ export interface SearchFilter {
   value: string;
 }
 
+/** 홈 탭 내부 스택 (화면 컴포넌트에서 사용) */
 export type RootStackParamList = {
   Home: undefined;
   AlbumList: { childId: string };
@@ -55,4 +61,5 @@ export type RootStackParamList = {
   CreateAlbum: { childId: string; albumId?: string };
   CreateChild: { childId?: string };
   ExportPDF: { albumIds: string[] };
+  Settings: undefined;
 };
