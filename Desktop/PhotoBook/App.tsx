@@ -1,11 +1,17 @@
-import React, { useRef } from 'react';
-import { NavigationContainer, NavigatorScreenParams, NavigationContainerRef } from '@react-navigation/native';
+import React, { useRef, useState, useCallback } from 'react';
+import { NavigationContainer, NavigatorScreenParams } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, TouchableOpacity, Platform, StyleSheet } from 'react-native';
+import {
+  View, Text, TouchableOpacity, Platform, StyleSheet,
+  Modal, Animated, FlatList, Image,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from '@react-navigation/native';
 import { COLORS } from './src/constants';
 import { RootStackParamList } from './src/types';
+import { Child } from './src/types';
+import { loadChildren } from './src/store/albumStore';
 
 import HomeScreen from './src/screens/HomeScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -58,19 +64,15 @@ function TabIconView({ name, active }: { name: string; active: boolean }) {
   const size = 22;
 
   if (name === 'HomeTab') {
-    // 집 아이콘
     return (
       <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-        {/* 지붕 */}
         <View style={{
           width: 0, height: 0,
           borderLeftWidth: 11, borderRightWidth: 11, borderBottomWidth: 9,
           borderLeftColor: 'transparent', borderRightColor: 'transparent',
           borderBottomColor: color, marginBottom: 1,
         }} />
-        {/* 벽 */}
         <View style={{ width: 14, height: 9, backgroundColor: color, borderRadius: 1 }}>
-          {/* 문 */}
           <View style={{
             position: 'absolute', bottom: 0, left: '50%', marginLeft: -2.5,
             width: 5, height: 5, backgroundColor: active ? COLORS.gradientStart : '#E5E7EB',
@@ -82,7 +84,6 @@ function TabIconView({ name, active }: { name: string; active: boolean }) {
   }
 
   if (name === 'AddTab') {
-    // + 아이콘
     return (
       <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
         <View style={{ width: 18, height: 2.5, backgroundColor: color, borderRadius: 1.5, position: 'absolute' }} />
@@ -92,19 +93,16 @@ function TabIconView({ name, active }: { name: string; active: boolean }) {
   }
 
   if (name === 'CalendarTab') {
-    // 달력 아이콘
     return (
       <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
         <View style={{
           width: 16, height: 15, borderWidth: 1.8, borderColor: color,
           borderRadius: 3,
         }}>
-          {/* 상단 날짜 고리 2개 */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: -4 }}>
             <View style={{ width: 2.5, height: 5, backgroundColor: color, borderRadius: 1 }} />
             <View style={{ width: 2.5, height: 5, backgroundColor: color, borderRadius: 1 }} />
           </View>
-          {/* 날짜 점들 */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 2 }}>
             <View style={{ width: 2.5, height: 2.5, backgroundColor: color, borderRadius: 1 }} />
             <View style={{ width: 2.5, height: 2.5, backgroundColor: color, borderRadius: 1 }} />
@@ -115,10 +113,9 @@ function TabIconView({ name, active }: { name: string; active: boolean }) {
     );
   }
 
-  // 설정 아이콘 - 톱니바퀴 (실제 기어 모양)
+  // 설정 아이콘 - 톱니바퀴
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      {/* 외부 톱니 링 (8개 돌기) */}
       <View style={{ position: 'absolute', width: 20, height: 20, alignItems: 'center', justifyContent: 'center' }}>
         {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => {
           const rad = (angle * Math.PI) / 180;
@@ -137,7 +134,6 @@ function TabIconView({ name, active }: { name: string; active: boolean }) {
             />
           );
         })}
-        {/* 안쪽 원 */}
         <View style={{
           width: 9, height: 9, borderRadius: 4.5,
           borderWidth: 2, borderColor: color,
@@ -148,57 +144,325 @@ function TabIconView({ name, active }: { name: string; active: boolean }) {
   );
 }
 
-/* ── 커스텀 탭 바 ── */
-function CustomTabBar({ state, navigation }: any) {
+/* ── 추가 바텀시트 (그룹/앨범 선택) ── */
+interface AddBottomSheetProps {
+  visible: boolean;
+  onClose: () => void;
+  navigation: any;
+}
+
+function AddBottomSheet({ visible, onClose, navigation }: AddBottomSheetProps) {
+  const sheetAnim = useRef(new Animated.Value(0)).current;
+  const [step, setStep] = useState<'select' | 'group-list'>('select');
+  const [children, setChildren] = useState<Child[]>([]);
+
+  React.useEffect(() => {
+    if (visible) {
+      setStep('select');
+      Animated.spring(sheetAnim, { toValue: 1, damping: 20, useNativeDriver: true }).start();
+    } else {
+      Animated.timing(sheetAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start();
+    }
+  }, [visible]);
+
+  const translateY = sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [400, 0] });
+
+  const handleAddGroup = () => {
+    onClose();
+    setTimeout(() => {
+      navigation.navigate('HomeTab', { screen: 'CreateChild', params: {} });
+    }, 250);
+  };
+
+  const handleAddAlbum = async () => {
+    const list = await loadChildren();
+    setChildren(list);
+    setStep('group-list');
+  };
+
+  const handleSelectGroup = (childId: string) => {
+    onClose();
+    setTimeout(() => {
+      navigation.navigate('HomeTab', { screen: 'CreateAlbum', params: { childId } });
+    }, 250);
+  };
+
+  if (!visible) return null;
+
   return (
-    <View style={tabStyles.wrapper}>
-      <View style={tabStyles.bar}>
-        {TAB_ITEMS.map((tab, index) => {
-          const isFocused = state.index === index;
-          const onPress = () => {
-            // AddTab: HomeTab의 CreateChild로 바로 이동
-            if (tab.name === 'AddTab') {
-              navigation.navigate('HomeTab', { screen: 'CreateChild', params: {} });
-              return;
-            }
-            const key = state.routes[index]?.key;
-            if (!key) return;
-            const event = navigation.emit({ type: 'tabPress', target: key, canPreventDefault: true });
-            if (!isFocused && !event.defaultPrevented) navigation.navigate(tab.name);
-          };
-          return (
-            <TouchableOpacity
-              key={tab.name}
-              onPress={onPress}
-              style={tabStyles.tabItem}
-              activeOpacity={0.75}
-            >
-              {/* 아이콘 박스 - 활성: 그라디언트 rounded */}
-              {isFocused ? (
-                <LinearGradient
-                  colors={[COLORS.gradientStart, COLORS.gradientEnd]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                  style={tabStyles.iconBoxActive}
-                >
-                  <TabIconView name={tab.name} active />
-                </LinearGradient>
-              ) : (
-                <View style={tabStyles.iconBox}>
-                  <TabIconView name={tab.name} active={false} />
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      {/* 배경 딤 */}
+      <TouchableOpacity
+        style={addSheetStyles.overlay}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <Animated.View
+          style={[addSheetStyles.sheet, { transform: [{ translateY }] }]}
+        >
+          {/* 터치 이벤트 시트 안으로 막기 */}
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            {/* 핸들 */}
+            <View style={addSheetStyles.handle} />
+
+            {step === 'select' ? (
+              /* ── 1단계: 그룹 추가 / 앨범 추가 선택 ── */
+              <>
+                <Text style={addSheetStyles.title}>무엇을 추가할까요?</Text>
+
+                {/* 그룹 추가 */}
+                <TouchableOpacity style={addSheetStyles.row} onPress={handleAddGroup} activeOpacity={0.8}>
+                  <LinearGradient
+                    colors={[COLORS.gradientStart, COLORS.gradientEnd]}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={addSheetStyles.rowIconBox}
+                  >
+                    <Text style={addSheetStyles.rowIconText}>👥</Text>
+                  </LinearGradient>
+                  <View style={{ flex: 1 }}>
+                    <Text style={addSheetStyles.rowTitle}>그룹 추가</Text>
+                    <Text style={addSheetStyles.rowSub}>새로운 그룹(인물)을 만들어요</Text>
+                  </View>
+                  <Text style={addSheetStyles.rowChevron}>›</Text>
+                </TouchableOpacity>
+
+                {/* 앨범 추가 */}
+                <TouchableOpacity style={addSheetStyles.row} onPress={handleAddAlbum} activeOpacity={0.8}>
+                  <LinearGradient
+                    colors={['#818CF8', '#A78BFA']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={addSheetStyles.rowIconBox}
+                  >
+                    <Text style={addSheetStyles.rowIconText}>📚</Text>
+                  </LinearGradient>
+                  <View style={{ flex: 1 }}>
+                    <Text style={addSheetStyles.rowTitle}>앨범 추가</Text>
+                    <Text style={addSheetStyles.rowSub}>그룹에 새 앨범을 만들어요</Text>
+                  </View>
+                  <Text style={addSheetStyles.rowChevron}>›</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              /* ── 2단계: 그룹 선택 ── */
+              <>
+                <View style={addSheetStyles.stepHeader}>
+                  <TouchableOpacity onPress={() => setStep('select')} style={addSheetStyles.backBtn}>
+                    <Text style={addSheetStyles.backBtnText}>←</Text>
+                  </TouchableOpacity>
+                  <Text style={addSheetStyles.title}>어떤 그룹에 추가할까요?</Text>
                 </View>
-              )}
-              <Text style={[tabStyles.label, isFocused && tabStyles.labelActive]}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
+
+                {children.length === 0 ? (
+                  <View style={addSheetStyles.emptyGroup}>
+                    <Text style={addSheetStyles.emptyGroupIcon}>👥</Text>
+                    <Text style={addSheetStyles.emptyGroupText}>
+                      먼저 그룹을 만들어주세요!
+                    </Text>
+                    <TouchableOpacity
+                      style={addSheetStyles.emptyGroupBtn}
+                      onPress={handleAddGroup}
+                    >
+                      <Text style={addSheetStyles.emptyGroupBtnText}>+ 그룹 만들기</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <FlatList
+                    data={children}
+                    keyExtractor={c => c.id}
+                    style={{ maxHeight: 320 }}
+                    showsVerticalScrollIndicator={false}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={[addSheetStyles.groupRow, { backgroundColor: item.color + '12' }]}
+                        onPress={() => handleSelectGroup(item.id)}
+                        activeOpacity={0.8}
+                      >
+                        {/* 아바타 */}
+                        {item.photoUri ? (
+                          <Image
+                            source={{ uri: item.photoUri }}
+                            style={addSheetStyles.groupAvatar}
+                          />
+                        ) : (
+                          <View style={[addSheetStyles.groupEmojiBox, { backgroundColor: item.color + '28' }]}>
+                            <Text style={addSheetStyles.groupEmoji}>{item.emoji}</Text>
+                          </View>
+                        )}
+                        {/* 색상 점 */}
+                        <View style={[addSheetStyles.colorDot, { backgroundColor: item.color }]} />
+                        {/* 이름 */}
+                        <Text style={addSheetStyles.groupName} numberOfLines={1}>{item.name}</Text>
+                        <Text style={addSheetStyles.rowChevron}>›</Text>
+                      </TouchableOpacity>
+                    )}
+                  />
+                )}
+              </>
+            )}
+
+            {/* 하단 여백 */}
+            <View style={{ height: Platform.OS === 'ios' ? 20 : 8 }} />
+          </TouchableOpacity>
+        </Animated.View>
+      </TouchableOpacity>
+    </Modal>
   );
 }
 
-/* AddTab 더미 컴포넌트 (실제로 보여지지 않음 - 누르면 CreateChild로 이동) */
+const addSheetStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? TAB_BAR_HEIGHT + 8 : TAB_BAR_HEIGHT + 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12, shadowRadius: 16, elevation: 20,
+  },
+  handle: {
+    width: 40, height: 4, backgroundColor: '#E5E7EB',
+    borderRadius: 2, alignSelf: 'center', marginBottom: 20,
+  },
+  title: {
+    fontSize: 18, fontWeight: '700', color: COLORS.text,
+    marginBottom: 16, flex: 1,
+  },
+  stepHeader: {
+    flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 8,
+  },
+  backBtn: {
+    width: 32, height: 32, alignItems: 'center', justifyContent: 'center',
+  },
+  backBtnText: { fontSize: 22, color: COLORS.text },
+
+  /* 추가 선택 행 */
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+    backgroundColor: '#F9FAFB', borderRadius: 20,
+    padding: 16, marginBottom: 12,
+    borderWidth: 1, borderColor: '#F3F4F6',
+  },
+  rowIconBox: {
+    width: 52, height: 52, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  rowIconText: { fontSize: 26 },
+  rowTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text, marginBottom: 3 },
+  rowSub: { fontSize: 13, color: COLORS.textSecondary },
+  rowChevron: { fontSize: 22, color: COLORS.textMuted },
+
+  /* 그룹 선택 행 */
+  groupRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 16, padding: 12, marginBottom: 8,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.8)',
+    position: 'relative',
+  },
+  groupAvatar: {
+    width: 48, height: 48, borderRadius: 24,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)',
+    marginRight: 12,
+  },
+  groupEmojiBox: {
+    width: 48, height: 48, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+    marginRight: 12,
+  },
+  groupEmoji: { fontSize: 24 },
+  colorDot: {
+    position: 'absolute', left: 48, bottom: 10,
+    width: 10, height: 10, borderRadius: 5,
+    borderWidth: 1.5, borderColor: '#fff',
+  },
+  groupName: {
+    flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.text,
+  },
+
+  /* 빈 그룹 상태 */
+  emptyGroup: {
+    alignItems: 'center', paddingVertical: 32,
+  },
+  emptyGroupIcon: { fontSize: 48, marginBottom: 12 },
+  emptyGroupText: {
+    fontSize: 15, color: COLORS.textSecondary, marginBottom: 16,
+  },
+  emptyGroupBtn: {
+    backgroundColor: COLORS.purple, borderRadius: 16,
+    paddingHorizontal: 24, paddingVertical: 10,
+  },
+  emptyGroupBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+});
+
+/* ── 커스텀 탭 바 ── */
+function CustomTabBar({ state, navigation }: any) {
+  const [addSheetVisible, setAddSheetVisible] = useState(false);
+
+  return (
+    <>
+      <AddBottomSheet
+        visible={addSheetVisible}
+        onClose={() => setAddSheetVisible(false)}
+        navigation={navigation}
+      />
+      <View style={tabStyles.wrapper}>
+        <View style={tabStyles.bar}>
+          {TAB_ITEMS.map((tab, index) => {
+            const isFocused = state.index === index;
+            const onPress = () => {
+              if (tab.name === 'AddTab') {
+                setAddSheetVisible(true);
+                return;
+              }
+              const key = state.routes[index]?.key;
+              if (!key) return;
+              const event = navigation.emit({ type: 'tabPress', target: key, canPreventDefault: true });
+              if (!isFocused && !event.defaultPrevented) navigation.navigate(tab.name);
+            };
+            return (
+              <TouchableOpacity
+                key={tab.name}
+                onPress={onPress}
+                style={tabStyles.tabItem}
+                activeOpacity={0.75}
+              >
+                {isFocused ? (
+                  <LinearGradient
+                    colors={[COLORS.gradientStart, COLORS.gradientEnd]}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={tabStyles.iconBoxActive}
+                  >
+                    <TabIconView name={tab.name} active />
+                  </LinearGradient>
+                ) : (
+                  <View style={tabStyles.iconBox}>
+                    <TabIconView name={tab.name} active={false} />
+                  </View>
+                )}
+                <Text style={[tabStyles.label, isFocused && tabStyles.labelActive]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    </>
+  );
+}
+
+/* AddTab 더미 컴포넌트 */
 function AddPlaceholder() {
   return <View style={{ flex: 1, backgroundColor: COLORS.bgPink }} />;
 }
@@ -242,12 +506,10 @@ const tabStyles = StyleSheet.create({
   tabItem: {
     flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4,
   },
-  /* 비활성 아이콘 박스 */
   iconBox: {
     width: 44, height: 32, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
   },
-  /* 활성 아이콘: 그라디언트 pill */
   iconBoxActive: {
     width: 52, height: 36, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center',

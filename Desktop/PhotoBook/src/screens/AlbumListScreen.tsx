@@ -85,13 +85,12 @@ export default function AlbumListScreen() {
     ]);
   };
 
-  /* ── 앨범 카드 (두 번째 이미지 스타일) ── */
+  /* ── 앨범 카드 ── */
   const AlbumCard = ({ item }: { item: Album }) => {
     const cover = item.coverPhotoId
       ? item.photos.find(p => p.id === item.coverPhotoId) ?? item.photos[0]
       : item.photos[0];
     const isSelected = selected.has(item.id);
-    // 그룹 테마 색상 - 선택 시 12% 투명도 배경 적용
     const themeColor = child?.color;
 
     const weatherDisplay = item.weather === 'other' && item.weatherCustom
@@ -104,8 +103,11 @@ export default function AlbumListScreen() {
       <TouchableOpacity
         style={[
           styles.card,
-          themeColor && { backgroundColor: themeColor + '12' },
-          isSelected && [styles.cardSelected, themeColor && { backgroundColor: themeColor + '28', borderColor: themeColor }],
+          /* 카드 배경: 항상 흰색, 선택 시 테마색 테두리 */
+          isSelected && [
+            styles.cardSelected,
+            themeColor && { borderColor: themeColor },
+          ],
         ]}
         onPress={() => selectMode
           ? toggleSelect(item.id)
@@ -125,46 +127,41 @@ export default function AlbumListScreen() {
           </View>
         )}
 
-        {/* 썸네일 */}
-        {cover ? (
-          <Image source={{ uri: cover.uri }} style={styles.thumb} />
-        ) : (
-          <View style={styles.thumbEmpty}>
-            <Text style={{ fontSize: 32 }}>📷</Text>
-          </View>
-        )}
+        {/* 썸네일 - 카드 내부 패딩 + 둥근 모서리 (그룹카드 이미지 스타일) */}
+        <View style={styles.thumbWrap}>
+          {cover ? (
+            <Image source={{ uri: cover.uri }} style={styles.thumb} />
+          ) : (
+            <View style={[styles.thumb, styles.thumbEmpty]}>
+              <Text style={{ fontSize: 28 }}>📷</Text>
+            </View>
+          )}
+        </View>
 
         {/* 정보 영역 */}
         <View style={styles.cardBody}>
           {/* 제목 */}
           <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
 
-          {/* 메타 정보 행 */}
+          {/* 메타 정보 */}
           <View style={styles.metaGrid}>
-            {/* 날짜 */}
             <View style={styles.metaItem}>
               <Text style={styles.metaIcon}>📅</Text>
               <Text style={styles.metaText} numberOfLines={1}>
                 {formatAlbumDate(item.date, item.dateEnd)}
               </Text>
             </View>
-
-            {/* 위치 */}
             {item.location ? (
               <View style={styles.metaItem}>
                 <Text style={[styles.metaIcon, { color: COLORS.purple }]}>📍</Text>
                 <Text style={styles.metaText} numberOfLines={1}>{item.location}</Text>
               </View>
             ) : null}
-
-            {/* 날씨 */}
             {weatherDisplay ? (
               <View style={styles.metaItem}>
                 <Text style={styles.metaText}>{weatherDisplay}</Text>
               </View>
             ) : null}
-
-            {/* 사진 수 */}
             <View style={styles.metaItem}>
               <Text style={[styles.metaIcon, { fontSize: 11 }]}>🖼</Text>
               <Text style={[styles.metaText, { color: COLORS.purple, fontWeight: '600' }]}>
@@ -174,7 +171,6 @@ export default function AlbumListScreen() {
           </View>
         </View>
 
-        {/* 오른쪽 화살표 */}
         <Text style={styles.chevron}>›</Text>
       </TouchableOpacity>
     );
@@ -182,15 +178,20 @@ export default function AlbumListScreen() {
 
   const sections = grouped();
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bgPink} />
+  /* 화면 배경색: 그룹 테마 12% 투명도 */
+  const screenBg = child?.color ? child.color + '12' : COLORS.bgPink;
 
-      {/* 배경 그라디언트 */}
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: screenBg }]}>
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+
+      {/* 배경: 테마 색상 12% + 베이스 그라디언트 */}
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: screenBg }]} />
       <LinearGradient
-        colors={[COLORS.bgPink, COLORS.bgPurple]}
+        colors={['transparent', 'rgba(255,255,255,0.08)']}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFillObject}
+        pointerEvents="none"
       />
 
       {/* 헤더 */}
@@ -311,7 +312,8 @@ export default function AlbumListScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bgPink },
+  container: { flex: 1 },
+
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
@@ -339,7 +341,7 @@ const styles = StyleSheet.create({
 
   searchBox: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 14,
     marginHorizontal: 16, marginBottom: 8,
     paddingHorizontal: 14, paddingVertical: 2,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
@@ -374,17 +376,19 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text },
   sectionCount: { fontSize: 13, color: COLORS.textSecondary },
 
-  listContent: { paddingHorizontal: 16, paddingBottom: 40 },
+  listContent: { paddingHorizontal: 16, paddingTop: 8 },
 
   /* ── 앨범 카드 ── */
   card: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.93)',
+    /* 카드 배경: 흰색 */
+    backgroundColor: '#FFFFFF',
     borderRadius: 20, marginBottom: 12,
-    overflow: 'hidden',
     shadowColor: COLORS.purple,
     shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 3,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.9)',
+    /* padding으로 이미지와 내용 간격 확보 */
+    padding: 12,
   },
   cardSelected: { borderWidth: 2, borderColor: COLORS.pink },
   check: {
@@ -395,16 +399,22 @@ const styles = StyleSheet.create({
   checkActive: { backgroundColor: COLORS.pink },
   checkMark: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
 
-  /* 썸네일 */
-  thumb: { width: 90, height: 90, resizeMode: 'cover' },
+  /* ── 썸네일: 카드 내부 + 둥근 모서리 (그룹카드 스타일) ── */
+  thumbWrap: {
+    marginRight: 12,
+  },
+  thumb: {
+    width: 72, height: 72,
+    borderRadius: 16,   /* 그룹카드 emojiBox와 동일한 radius */
+    resizeMode: 'cover',
+  },
   thumbEmpty: {
-    width: 90, height: 90,
     backgroundColor: COLORS.bgPurple,
     alignItems: 'center', justifyContent: 'center',
   },
 
   /* 카드 정보 */
-  cardBody: { flex: 1, paddingHorizontal: 14, paddingVertical: 12 },
+  cardBody: { flex: 1, paddingRight: 4 },
   cardTitle: {
     fontSize: 15, fontWeight: '700', color: COLORS.text,
     marginBottom: 8,
@@ -414,7 +424,7 @@ const styles = StyleSheet.create({
   metaIcon: { fontSize: 12, color: COLORS.calendarIcon },
   metaText: { fontSize: 12, color: COLORS.textSecondary, flexShrink: 1 },
 
-  chevron: { fontSize: 20, color: COLORS.textMuted, paddingRight: 12 },
+  chevron: { fontSize: 20, color: COLORS.textMuted, paddingLeft: 4 },
 
   /* 빈 상태 */
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
