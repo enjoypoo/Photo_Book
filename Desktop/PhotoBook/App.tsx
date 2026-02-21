@@ -1,5 +1,5 @@
-import React from 'react';
-import { NavigationContainer, NavigatorScreenParams } from '@react-navigation/native';
+import React, { useRef } from 'react';
+import { NavigationContainer, NavigatorScreenParams, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, TouchableOpacity, Platform, StyleSheet } from 'react-native';
@@ -14,6 +14,7 @@ import AlbumListScreen from './src/screens/AlbumListScreen';
 import AlbumDetailScreen from './src/screens/AlbumDetailScreen';
 import CreateAlbumScreen from './src/screens/CreateAlbumScreen';
 import ExportPDFScreen from './src/screens/ExportPDFScreen';
+import CalendarScreen from './src/screens/CalendarScreen';
 
 type HomeStackParamList = RootStackParamList;
 
@@ -79,6 +80,7 @@ function TabIconView({ name, active }: { name: string; active: boolean }) {
       </View>
     );
   }
+
   if (name === 'AddTab') {
     // + 아이콘
     return (
@@ -88,6 +90,7 @@ function TabIconView({ name, active }: { name: string; active: boolean }) {
       </View>
     );
   }
+
   if (name === 'CalendarTab') {
     // 달력 아이콘
     return (
@@ -111,15 +114,35 @@ function TabIconView({ name, active }: { name: string; active: boolean }) {
       </View>
     );
   }
-  // 설정 아이콘 (기어)
+
+  // 설정 아이콘 - 톱니바퀴 (실제 기어 모양)
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{
-        width: 16, height: 16, borderRadius: 8,
-        borderWidth: 2, borderColor: color,
-        alignItems: 'center', justifyContent: 'center',
-      }}>
-        <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: color }} />
+      {/* 외부 톱니 링 (8개 돌기) */}
+      <View style={{ position: 'absolute', width: 20, height: 20, alignItems: 'center', justifyContent: 'center' }}>
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => {
+          const rad = (angle * Math.PI) / 180;
+          const x = Math.cos(rad) * 8;
+          const y = Math.sin(rad) * 8;
+          return (
+            <View
+              key={angle}
+              style={{
+                position: 'absolute',
+                width: 5, height: 5,
+                borderRadius: 1.5,
+                backgroundColor: color,
+                transform: [{ translateX: x - 2.5 }, { translateY: y - 2.5 }, { rotate: `${angle}deg` }],
+              }}
+            />
+          );
+        })}
+        {/* 안쪽 원 */}
+        <View style={{
+          width: 9, height: 9, borderRadius: 4.5,
+          borderWidth: 2, borderColor: color,
+          backgroundColor: 'transparent',
+        }} />
       </View>
     </View>
   );
@@ -133,6 +156,11 @@ function CustomTabBar({ state, navigation }: any) {
         {TAB_ITEMS.map((tab, index) => {
           const isFocused = state.index === index;
           const onPress = () => {
+            // AddTab: HomeTab의 CreateChild로 바로 이동
+            if (tab.name === 'AddTab') {
+              navigation.navigate('HomeTab', { screen: 'CreateChild', params: {} });
+              return;
+            }
             const key = state.routes[index]?.key;
             if (!key) return;
             const event = navigation.emit({ type: 'tabPress', target: key, canPreventDefault: true });
@@ -170,11 +198,8 @@ function CustomTabBar({ state, navigation }: any) {
   );
 }
 
-/* ── 플레이스홀더 화면 (추가/달력) ── */
+/* AddTab 더미 컴포넌트 (실제로 보여지지 않음 - 누르면 CreateChild로 이동) */
 function AddPlaceholder() {
-  return <View style={{ flex: 1, backgroundColor: COLORS.bgPink }} />;
-}
-function CalendarPlaceholder() {
   return <View style={{ flex: 1, backgroundColor: COLORS.bgPink }} />;
 }
 
@@ -188,7 +213,7 @@ export default function App() {
         >
           <Tab.Screen name="HomeTab" component={HomeStackNav} />
           <Tab.Screen name="AddTab" component={AddPlaceholder} />
-          <Tab.Screen name="CalendarTab" component={CalendarPlaceholder} />
+          <Tab.Screen name="CalendarTab" component={CalendarScreen} />
           <Tab.Screen name="SettingsTab" component={SettingsScreen} />
         </Tab.Navigator>
       </NavigationContainer>

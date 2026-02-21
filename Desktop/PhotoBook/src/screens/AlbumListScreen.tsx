@@ -91,6 +91,8 @@ export default function AlbumListScreen() {
       ? item.photos.find(p => p.id === item.coverPhotoId) ?? item.photos[0]
       : item.photos[0];
     const isSelected = selected.has(item.id);
+    // 그룹 테마 색상 - 선택 시 12% 투명도 배경 적용
+    const themeColor = child?.color;
 
     const weatherDisplay = item.weather === 'other' && item.weatherCustom
       ? item.weatherCustom
@@ -100,7 +102,11 @@ export default function AlbumListScreen() {
 
     return (
       <TouchableOpacity
-        style={[styles.card, isSelected && styles.cardSelected]}
+        style={[
+          styles.card,
+          themeColor && { backgroundColor: themeColor + '12' },
+          isSelected && [styles.cardSelected, themeColor && { backgroundColor: themeColor + '28', borderColor: themeColor }],
+        ]}
         onPress={() => selectMode
           ? toggleSelect(item.id)
           : navigation.navigate('AlbumDetail', { albumId: item.id, childId })}

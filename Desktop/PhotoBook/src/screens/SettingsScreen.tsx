@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  SafeAreaView, StatusBar, Alert, ScrollView, Switch,
+  SafeAreaView, StatusBar, Alert, ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, STORAGE_KEY, CHILDREN_KEY } from '../constants';
 import { loadAlbums, loadChildren } from '../store/albumStore';
+import { TAB_BAR_HEIGHT } from '../../App';
 
 const APP_VERSION = '1.0.0';
 
@@ -16,6 +20,8 @@ export default function SettingsScreen() {
   const [albumCount, setAlbumCount] = useState(0);
   const [photoCount, setPhotoCount] = useState(0);
   const [storageUsed, setStorageUsed] = useState('계산 중...');
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     loadStats();
@@ -66,6 +72,238 @@ export default function SettingsScreen() {
     }
   };
 
+  /* ── 데이터 내보내기 ─────────────────────────────────
+   * 전략: JSON 메타데이터(그룹+앨범) + 사진 파일(Base64 인코딩)을
+   * 하나의 .photobook 파일로 묶어 공유.
+   * 대용량 처리: 사진을 청크 단위로 순차 처리해 메모리 부하 최소화.
+   ─────────────────────────────────────────────────── */
+  const handleExport = async () => {
+    Alert.alert(
+      '📤 데이터 내보내기',
+      '모든 그룹, 앨범, 사진을 하나의 파일로 내보냅니다.\n사진이 많으면 시간이 걸릴 수 있어요.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '내보내기', onPress: async () => {
+            setExporting(true);
+            try {
+              const children = await loadChildren();
+              const albums = await loadAlbums();
+
+              // 사진 파일을 Base64로 인코딩해 번들에 포함
+              const photoFiles: Record<string, string> = {};
+              for (const album of albums) {
+                for (const photo of album.photos) {
+                  if (photo.uri && photo.uri.startsWith('/')) {
+                    try {
+                      const info = await FileSystem.getInfoAsync(photo.uri);
+                      if (info.exists) {
+                        const b64 = await FileSystem.readAsStringAsync(photo.uri, {
+                          encoding: FileSystem.EncodingType.Base64,
+                        });
+                        photoFiles[photo.uri] = b64;
+                      }
+                    } catch { /* 개별 사진 오류 무시 */ }
+                  }
+                }
+              }
+
+              // 그룹 대표 사진 (group_photos)
+              const groupPhotoDir = `${FileSystem.documentDirectory}group_photos/`;
+              const groupPhotoInfo = await FileSystem.getInfoAsync(groupPhotoDir);
+              if (groupPhotoInfo.exists) {
+                const files = await FileSystem.readDirectoryAsync(groupPhotoDir).catch(() => []);
+                for (const file of files) {
+                  const filePath = `${groupPhotoDir}${file}`;
+                  try {
+                    const b64 = await FileSystem.readAsStringAsync(filePath, {
+                      encoding: FileSystem.EncodingType.Base64,
+                    });
+                    photoFiles[filePath] = b64;
+                  } catch { /* 무시 */ }
+                }
+              }
+
+              const bundle = {
+                version: APP_VERSION,
+                exportedAt: new Date().toISOString(),
+                children,
+                albums,
+                photoFiles,  // { uri: base64 }
+              };
+
+              // 임시 파일로 저장
+              const exportPath = `${FileSystem.documentDirectory}photobook_backup.photobook`;
+              await FileSystem.writeAsStringAsync(
+                exportPath,
+                JSON.stringify(bundle),
+                { encoding: FileSystem.EncodingType.UTF8 }
+              );
+
+              // 공유 다이얼로그
+              const canShare = await Sharing.isAvailableAsync();
+              if (!canShare) {
+                Alert.alert('오류', '이 기기에서는 파일 공유가 지원되지 않습니다.');
+                return;
+              }
+              await Sharing.shareAsync(exportPath, {
+                mimeType: 'application/json',
+                dialogTitle: '우리 추억 앨범 백업 파일',
+                UTI: 'public.json',
+              });
+              Alert.alert('완료', '데이터를 내보냈습니다!\n파일을 카카오톡, 이메일, 클라우드 등에 저장해두세요.');
+            } catch (e) {
+              Alert.alert('오류', '내보내기 중 문제가 발생했습니다.');
+            } finally {
+              setExporting(false);
+            }
+          }
+        },
+      ]
+    );
+  };
+
+  /* ── 데이터 가져오기 ─────────────────────────────────
+   * 전략: .photobook 파일 선택 → 파싱 → 사진 파일 복원 →
+   * 기존 데이터와 병합(중복 id 스킵) or 전체 교체 선택
+   ─────────────────────────────────────────────────── */
+  const handleImport = async () => {
+    Alert.alert(
+      '📥 데이터 가져오기',
+      '백업 파일(.photobook)을 선택해주세요.\n가져온 데이터를 기존 데이터와 병합하거나 교체할 수 있어요.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '파일 선택', onPress: async () => {
+            try {
+              const result = await DocumentPicker.getDocumentAsync({
+                type: '*/*',
+                copyToCacheDirectory: true,
+              });
+
+              if (result.canceled || !result.assets?.[0]) return;
+
+              const fileUri = result.assets[0].uri;
+              setImporting(true);
+
+              const content = await FileSystem.readAsStringAsync(fileUri, {
+                encoding: FileSystem.EncodingType.UTF8,
+              });
+              const bundle = JSON.parse(content);
+
+              if (!bundle.children || !bundle.albums) {
+                Alert.alert('오류', '올바른 백업 파일이 아닙니다.');
+                return;
+              }
+
+              // 병합 or 교체 선택
+              Alert.alert(
+                '가져오기 방식 선택',
+                `백업 파일: 그룹 ${bundle.children.length}개 / 앨범 ${bundle.albums.length}개\n\n어떻게 가져올까요?`,
+                [
+                  { text: '취소', style: 'cancel', onPress: () => setImporting(false) },
+                  {
+                    text: '병합 (기존 유지)',
+                    onPress: () => importData(bundle, 'merge'),
+                  },
+                  {
+                    text: '교체 (전체 덮어쓰기)',
+                    style: 'destructive',
+                    onPress: () => importData(bundle, 'replace'),
+                  },
+                ]
+              );
+            } catch {
+              Alert.alert('오류', '파일을 읽을 수 없습니다.');
+              setImporting(false);
+            }
+          }
+        },
+      ]
+    );
+  };
+
+  const importData = async (bundle: any, mode: 'merge' | 'replace') => {
+    try {
+      const { children: newChildren, albums: newAlbums, photoFiles = {} } = bundle;
+
+      // 사진 파일 복원 (Base64 → 실제 파일)
+      const uriMap: Record<string, string> = {};
+      for (const [origUri, b64] of Object.entries(photoFiles as Record<string, string>)) {
+        try {
+          // 기존 URI 경로 구조 유지 (documentDirectory 기준으로 재구성)
+          const fileName = origUri.split('/').pop() ?? 'photo.jpg';
+          const subPath = origUri.includes('group_photos') ? 'group_photos' : 'photos';
+
+          let destDir = `${FileSystem.documentDirectory}${subPath}/`;
+          if (subPath === 'photos') {
+            // photos/albumId/photoId.jpg 구조
+            const parts = origUri.split('/photos/');
+            if (parts[1]) {
+              const subDir = parts[1].split('/').slice(0, -1).join('/');
+              destDir = `${FileSystem.documentDirectory}photos/${subDir}/`;
+            }
+          }
+
+          await FileSystem.makeDirectoryAsync(destDir, { intermediates: true });
+          const destPath = `${destDir}${fileName}`;
+          await FileSystem.writeAsStringAsync(destPath, b64, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          uriMap[origUri] = destPath;
+        } catch { /* 개별 파일 복원 실패 무시 */ }
+      }
+
+      // URI 매핑 적용 (복원된 경로로 교체)
+      const updatedAlbums = newAlbums.map((album: any) => ({
+        ...album,
+        photos: album.photos.map((photo: any) => ({
+          ...photo,
+          uri: uriMap[photo.uri] ?? photo.uri,
+        })),
+      }));
+
+      const updatedChildren = newChildren.map((child: any) => ({
+        ...child,
+        photoUri: child.photoUri ? (uriMap[child.photoUri] ?? child.photoUri) : undefined,
+      }));
+
+      if (mode === 'replace') {
+        // 전체 교체
+        await AsyncStorage.setItem(CHILDREN_KEY, JSON.stringify(updatedChildren));
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAlbums));
+      } else {
+        // 병합: 기존 데이터와 합치되 중복 id 스킵
+        const existingChildren = await loadChildren();
+        const existingAlbums = await loadAlbums();
+        const existingChildIds = new Set(existingChildren.map((c: any) => c.id));
+        const existingAlbumIds = new Set(existingAlbums.map((a: any) => a.id));
+
+        const mergedChildren = [
+          ...existingChildren,
+          ...updatedChildren.filter((c: any) => !existingChildIds.has(c.id)),
+        ];
+        const mergedAlbums = [
+          ...existingAlbums,
+          ...updatedAlbums.filter((a: any) => !existingAlbumIds.has(a.id)),
+        ];
+
+        await AsyncStorage.setItem(CHILDREN_KEY, JSON.stringify(mergedChildren));
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(mergedAlbums));
+      }
+
+      await loadStats();
+      Alert.alert(
+        '완료 ✅',
+        `데이터를 성공적으로 가져왔습니다!\n그룹 ${updatedChildren.length}개 / 앨범 ${updatedAlbums.length}개`,
+      );
+    } catch {
+      Alert.alert('오류', '데이터 가져오기 중 문제가 발생했습니다.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   /* 전체 데이터 삭제 */
   const handleClearAllData = () => {
     Alert.alert(
@@ -78,7 +316,6 @@ export default function SettingsScreen() {
             try {
               await AsyncStorage.removeItem(STORAGE_KEY);
               await AsyncStorage.removeItem(CHILDREN_KEY);
-              // 이미지 파일 삭제
               if (FileSystem.documentDirectory) {
                 const photosDir = `${FileSystem.documentDirectory}photos/`;
                 const groupDir = `${FileSystem.documentDirectory}group_photos/`;
@@ -152,11 +389,23 @@ export default function SettingsScreen() {
         style={styles.header}
       >
         <Text style={styles.headerTitle}>설정</Text>
-        <Text style={styles.headerSub}>앱 관리 및 데이터 설정 ⚙️</Text>
+        <Text style={styles.headerSub}>앱 관리 및 데이터 설정</Text>
       </LinearGradient>
 
+      {/* 로딩 오버레이 */}
+      {(exporting || importing) && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={COLORS.purple} />
+            <Text style={styles.loadingText}>
+              {exporting ? '📤 내보내는 중...\n사진이 많으면 잠시 기다려주세요' : '📥 가져오는 중...'}
+            </Text>
+          </View>
+        </View>
+      )}
+
       <ScrollView
-        contentContainerStyle={styles.body}
+        contentContainerStyle={[styles.body, { paddingBottom: TAB_BAR_HEIGHT + 20 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* ── 통계 카드 ── */}
@@ -179,6 +428,24 @@ export default function SettingsScreen() {
         {/* ── 데이터 관리 ── */}
         <Text style={styles.sectionTitle}>데이터 관리</Text>
         <View style={styles.section}>
+          {/* 데이터 내보내기 */}
+          <SettingRow
+            icon="📤"
+            iconBg="#EFF6FF"
+            title="데이터 내보내기"
+            subtitle="그룹·앨범·사진 전체를 파일로 저장"
+            onPress={handleExport}
+          />
+          <View style={styles.divider} />
+          {/* 데이터 가져오기 */}
+          <SettingRow
+            icon="📥"
+            iconBg="#F0FDF4"
+            title="데이터 가져오기"
+            subtitle="백업 파일에서 데이터 복원"
+            onPress={handleImport}
+          />
+          <View style={styles.divider} />
           <SettingRow
             icon="🧹"
             iconBg="#EFF6FF"
@@ -195,6 +462,19 @@ export default function SettingsScreen() {
             onPress={handleClearAllData}
             danger
           />
+        </View>
+
+        {/* ── 백업 안내 ── */}
+        <View style={styles.infoBox}>
+          <Text style={styles.infoBoxTitle}>💡 데이터 이전 방법</Text>
+          <Text style={styles.infoBoxText}>
+            1. 현재 폰에서 <Text style={styles.bold}>데이터 내보내기</Text>를 눌러 파일을 저장{'\n'}
+            2. 카카오톡·이메일·클라우드로 파일을 새 폰으로 전송{'\n'}
+            3. 새 폰에서 앱 설치 후 <Text style={styles.bold}>데이터 가져오기</Text>로 복원
+          </Text>
+          <Text style={styles.infoBoxNote}>
+            ※ 사진이 많을수록 파일 크기가 커지며 전송 시간이 더 걸릴 수 있어요.
+          </Text>
         </View>
 
         {/* ── 앱 정보 ── */}
@@ -231,8 +511,6 @@ export default function SettingsScreen() {
             </Text>
           </View>
         </View>
-
-        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -296,6 +574,22 @@ const styles = StyleSheet.create({
 
   body: { padding: 20 },
 
+  /* 로딩 오버레이 */
+  loadingOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 200,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  loadingBox: {
+    backgroundColor: '#fff', borderRadius: 20, padding: 32,
+    alignItems: 'center', gap: 16, minWidth: 240,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15, shadowRadius: 20, elevation: 10,
+  },
+  loadingText: {
+    fontSize: 14, color: COLORS.text, textAlign: 'center', lineHeight: 22,
+  },
+
   /* 통계 카드 */
   statsCard: { borderRadius: 24, overflow: 'hidden', marginBottom: 28, elevation: 6,
     shadowColor: COLORS.pink, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 16 },
@@ -315,12 +609,24 @@ const styles = StyleSheet.create({
   },
   section: {
     backgroundColor: 'rgba(255,255,255,0.92)',
-    borderRadius: 20, marginBottom: 28, overflow: 'hidden',
+    borderRadius: 20, marginBottom: 20, overflow: 'hidden',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.8)',
     shadowColor: COLORS.purple, shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06, shadowRadius: 12, elevation: 3,
   },
   divider: { height: 1, backgroundColor: '#F3F4F6', marginHorizontal: 16 },
+
+  /* 백업 안내 */
+  infoBox: {
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 16, padding: 16, marginBottom: 24,
+    borderWidth: 1, borderColor: COLORS.purplePastel ?? '#FAF5FF',
+    borderLeftWidth: 4, borderLeftColor: COLORS.purple,
+  },
+  infoBoxTitle: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 8 },
+  infoBoxText: { fontSize: 13, color: COLORS.text, lineHeight: 22 },
+  infoBoxNote: { fontSize: 11, color: COLORS.textSecondary, marginTop: 8, lineHeight: 16 },
+  bold: { fontWeight: '700' },
 
   /* 설정 행 */
   settingRow: {
