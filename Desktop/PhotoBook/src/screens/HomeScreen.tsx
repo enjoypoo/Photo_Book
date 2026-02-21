@@ -10,6 +10,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Child, GroupType, RootStackParamList } from '../types';
 import { loadChildren, deleteChild, loadAlbumsByChild } from '../store/albumStore';
 import { COLORS } from '../constants';
+import { TAB_BAR_HEIGHT } from '../../App';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 const { width } = Dimensions.get('window');
@@ -120,7 +121,7 @@ export default function HomeScreen() {
         <FlatList
           data={children}
           keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: TAB_BAR_HEIGHT + 16 }]}
           showsVerticalScrollIndicator={false}
           renderItem={({ item, index }) => (
             <ChildCard
@@ -172,7 +173,7 @@ function ChildCard({ item, albumCount, index, onPress, onLongPress }: CardProps)
   return (
     <Animated.View style={{ opacity: anim, transform: [{ translateY: slideY }] }}>
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, { backgroundColor: item.color + '12' }]}
         onPress={onPress}
         onLongPress={onLongPress}
         activeOpacity={0.82}
@@ -247,12 +248,11 @@ const styles = StyleSheet.create({
   /* 카드 */
   card: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: 22, padding: 16, marginBottom: 12,
     shadowColor: COLORS.purple,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08, shadowRadius: 16, elevation: 4,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.8)',
+    shadowOpacity: 0.1, shadowRadius: 16, elevation: 4,
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.9)',
   },
   cardLeft: { marginRight: 14, position: 'relative' },
   avatarImg: {

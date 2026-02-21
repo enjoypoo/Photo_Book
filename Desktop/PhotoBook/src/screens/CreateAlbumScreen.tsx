@@ -15,6 +15,7 @@ import { Album, PhotoEntry, RootStackParamList, WeatherOption } from '../types';
 import { upsertAlbum, getAlbumById, saveImageLocally } from '../store/albumStore';
 import { COLORS, WEATHER_OPTIONS } from '../constants';
 import { getTodayISO, parseExifDate, toDateOnly, formatDateKorean, formatDateTimeKorean } from '../utils/dateUtils';
+import { TAB_BAR_HEIGHT } from '../../App';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'CreateAlbum'>;
 type Route = RouteProp<RootStackParamList, 'CreateAlbum'>;
@@ -268,7 +269,6 @@ export default function CreateAlbumScreen() {
               style={[styles.input, styles.dateBtn]}
               onPress={() => { Keyboard.dismiss(); setPickerDate(new Date(date.split('T')[0])); setShowDatePicker(true); }}
             >
-              <Text style={styles.dateIcon}>📅</Text>
               <Text style={styles.dateBtnText}>{dateDisplayStr()}</Text>
             </TouchableOpacity>
             {dateEnd && (
@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 20, paddingBottom: 36,
+    padding: 20, paddingBottom: TAB_BAR_HEIGHT + 20,
   },
   sheetHandle: { width: 40, height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   sheetTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text, marginBottom: 20 },

@@ -15,10 +15,8 @@ import AlbumDetailScreen from './src/screens/AlbumDetailScreen';
 import CreateAlbumScreen from './src/screens/CreateAlbumScreen';
 import ExportPDFScreen from './src/screens/ExportPDFScreen';
 
-// RootStackParamList를 홈 스택 타입으로 사용
 type HomeStackParamList = RootStackParamList;
 
-/* ─── 탭 타입 ────────────────────────────────────────────── */
 type TabParamList = {
   HomeTab: NavigatorScreenParams<HomeStackParamList>;
   SettingsTab: undefined;
@@ -27,7 +25,9 @@ type TabParamList = {
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
-/* ─── 홈 스택 네비게이터 ────────────────────────────────── */
+/* 탭바 높이 (다른 화면에서 bottomPadding에 활용) */
+export const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : 64;
+
 function HomeStackNav() {
   return (
     <HomeStack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
@@ -41,51 +41,82 @@ function HomeStackNav() {
   );
 }
 
-/* ─── 커스텀 탭 바 ──────────────────────────────────────── */
-function CustomTabBar({ state, descriptors, navigation }: any) {
-  const tabs = [
-    { name: 'HomeTab', label: '홈', icon: '🏠' },
-    { name: 'SettingsTab', label: '설정', icon: '⚙️' },
-  ];
+/* ── 탭 아이템 정의 ── */
+const TAB_ITEMS = [
+  { name: 'HomeTab',     label: '홈',  svgPath: 'home'     },
+  { name: 'SettingsTab', label: '설정', svgPath: 'settings' },
+];
 
+/* ── 커스텀 탭 바 ── */
+function CustomTabBar({ state, navigation }: any) {
   return (
     <View style={tabStyles.wrapper}>
-      <LinearGradient
-        colors={['rgba(255,255,255,0.97)', '#ffffff']}
-        style={tabStyles.bar}
-      >
-        {tabs.map((tab, index) => {
+      {/* 배경 */}
+      <View style={tabStyles.bar}>
+        {TAB_ITEMS.map((tab, index) => {
           const isFocused = state.index === index;
           const onPress = () => {
-            const event = navigation.emit({ type: 'tabPress', target: state.routes[index].key, canPreventDefault: true });
+            const key = state.routes[index]?.key;
+            if (!key) return;
+            const event = navigation.emit({ type: 'tabPress', target: key, canPreventDefault: true });
             if (!isFocused && !event.defaultPrevented) navigation.navigate(tab.name);
           };
           return (
-            <TouchableOpacity key={tab.name} onPress={onPress} style={tabStyles.tabBtn} activeOpacity={0.8}>
-              {isFocused ? (
-                <LinearGradient
-                  colors={[COLORS.gradientStart, COLORS.gradientEnd]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={tabStyles.pill}
-                >
-                  <Text style={tabStyles.activeIcon}>{tab.icon}</Text>
-                  <Text style={tabStyles.activeLabel}>{tab.label}</Text>
-                </LinearGradient>
-              ) : (
-                <View style={tabStyles.pill}>
-                  <Text style={tabStyles.inactiveIcon}>{tab.icon}</Text>
-                  <Text style={tabStyles.inactiveLabel}>{tab.label}</Text>
-                </View>
-              )}
+            <TouchableOpacity
+              key={tab.name}
+              onPress={onPress}
+              style={tabStyles.tabBtn}
+              activeOpacity={0.75}
+            >
+              {/* 이미지처럼: 아이콘 박스 + 라벨 수직 배치 */}
+              <View style={[tabStyles.iconWrap, isFocused && tabStyles.iconWrapActive]}>
+                {isFocused ? (
+                  <LinearGradient
+                    colors={[COLORS.gradientStart, COLORS.gradientEnd]}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={tabStyles.iconGrad}
+                  >
+                    <TabIcon name={tab.name} active />
+                  </LinearGradient>
+                ) : (
+                  <View style={tabStyles.iconGrad}>
+                    <TabIcon name={tab.name} active={false} />
+                  </View>
+                )}
+              </View>
+              <Text style={[tabStyles.tabLabel, isFocused && tabStyles.tabLabelActive]}>
+                {tab.label}
+              </Text>
             </TouchableOpacity>
           );
         })}
-      </LinearGradient>
+      </View>
     </View>
   );
 }
 
-/* ─── 메인 탭 네비게이터 ─────────────────────────────────── */
+/* ── 탭 아이콘 (이모티콘 없는 SVG 스타일 텍스트) ── */
+function TabIcon({ name, active }: { name: string; active: boolean }) {
+  const color = active ? '#fff' : COLORS.textMuted;
+  if (name === 'HomeTab') {
+    return (
+      <View style={tabStyles.svgIcon}>
+        {/* 집 지붕 삼각형 느낌 */}
+        <View style={[tabStyles.roofTop, { borderBottomColor: color }]} />
+        <View style={[tabStyles.roofBody, { borderColor: color }]} />
+      </View>
+    );
+  }
+  // 설정: 기어 느낌 원
+  return (
+    <View style={tabStyles.svgIcon}>
+      <View style={[tabStyles.gearOuter, { borderColor: color }]}>
+        <View style={[tabStyles.gearInner, { backgroundColor: color }]} />
+      </View>
+    </View>
+  );
+}
+
 export default function App() {
   return (
     <View style={{ flex: 1 }}>
@@ -105,28 +136,61 @@ export default function App() {
 const tabStyles = StyleSheet.create({
   wrapper: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    shadowColor: COLORS.purple,
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.12, shadowRadius: 20, elevation: 20,
+    shadowColor: '#C084FC',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1, shadowRadius: 16, elevation: 16,
   },
   bar: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 12,
-    paddingHorizontal: 32,
-    paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 16,
-    borderTopLeftRadius: 26, borderTopRightRadius: 26,
-    borderTopWidth: 1, borderColor: 'rgba(243,232,255,0.9)',
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3E8FF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    justifyContent: 'space-around',
   },
-  tabBtn: { flex: 1, alignItems: 'center' },
-  pill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 18, paddingVertical: 10,
-    borderRadius: 24, minWidth: 80, justifyContent: 'center',
+  tabBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4,
   },
-  activeIcon: { fontSize: 17 },
-  activeLabel: { fontSize: 14, fontWeight: '700', color: '#fff' },
-  inactiveIcon: { fontSize: 17 },
-  inactiveLabel: { fontSize: 14, fontWeight: '600', color: COLORS.textMuted },
+  iconWrap: {
+    width: 48, height: 32, borderRadius: 16,
+    overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
+  },
+  iconWrapActive: {},
+  iconGrad: {
+    width: 48, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tabLabel: {
+    fontSize: 11, fontWeight: '500', color: COLORS.textMuted, marginTop: 2,
+  },
+  tabLabelActive: {
+    color: COLORS.purple, fontWeight: '700',
+  },
+  /* 집 아이콘 */
+  svgIcon: { alignItems: 'center', justifyContent: 'center' },
+  roofTop: {
+    width: 0, height: 0,
+    borderLeftWidth: 8, borderRightWidth: 8, borderBottomWidth: 7,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent',
+    borderBottomColor: '#9CA3AF',
+    marginBottom: 1,
+  },
+  roofBody: {
+    width: 11, height: 8,
+    borderWidth: 1.5, borderColor: '#9CA3AF', borderRadius: 1,
+  },
+  /* 기어 아이콘 */
+  gearOuter: {
+    width: 14, height: 14, borderRadius: 7,
+    borderWidth: 2, borderColor: '#9CA3AF',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  gearInner: {
+    width: 5, height: 5, borderRadius: 2.5,
+    backgroundColor: '#9CA3AF',
+  },
 });
