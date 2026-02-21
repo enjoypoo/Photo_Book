@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "아이 포토북",
+    "slug": "photo-book",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFF5F7"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.photobook.kids",
+      "infoPlist": {
+        "NSCameraUsageDescription": "아이 사진 촬영을 위해 카메라 접근이 필요합니다.",
+        "NSPhotoLibraryUsageDescription": "사진 앨범에서 사진을 선택하려면 접근 권한이 필요합니다.",
+        "NSPhotoLibraryAddUsageDescription": "생성된 PDF를 사진 앨범에 저장합니다.",
+        "NSLocationWhenInUseUsageDescription": "사진 촬영 위치 정보를 기록합니다."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFF5F7"
+      },
+      "package": "com.photobook.kids",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-image-picker",
+      "expo-location",
+      "expo-media-library"
+    ]
+  }
+}
