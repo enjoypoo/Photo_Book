@@ -8,7 +8,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Album, RootStackParamList } from '../types';
 import { getAlbumById, deleteAlbum } from '../store/albumStore';
 import { COLORS, WEATHER_LABEL } from '../constants';
-import { formatDateKorean } from '../utils/dateUtils';
+import { formatAlbumDate } from '../utils/dateUtils';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'AlbumDetail'>;
 type Route = RouteProp<RootStackParamList, 'AlbumDetail'>;
@@ -55,7 +55,7 @@ export default function AlbumDetailScreen() {
           <View style={styles.tags}>
             <View style={styles.tag}>
               <Text style={[styles.tagIcon, { color: COLORS.calendarIcon }]}>📅</Text>
-              <Text style={styles.tagText}>{formatDateKorean(album.date)}</Text>
+              <Text style={styles.tagText}>{formatAlbumDate(album.date, album.dateEnd)}</Text>
             </View>
             {album.location ? (
               <View style={styles.tag}>
@@ -66,7 +66,11 @@ export default function AlbumDetailScreen() {
             {album.weatherEmoji ? (
               <View style={styles.tag}>
                 <Text style={styles.tagIcon}>{album.weatherEmoji}</Text>
-                <Text style={styles.tagText}>{WEATHER_LABEL[album.weather] ?? album.weather}</Text>
+                <Text style={styles.tagText}>
+                  {album.weather === 'other' && album.weatherCustom
+                    ? album.weatherCustom
+                    : (WEATHER_LABEL[album.weather] ?? album.weather)}
+                </Text>
               </View>
             ) : null}
           </View>

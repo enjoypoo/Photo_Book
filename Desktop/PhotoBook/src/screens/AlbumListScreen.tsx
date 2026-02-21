@@ -9,7 +9,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Album, Child, FilterType, RootStackParamList } from '../types';
 import { loadAlbumsByChild, loadChildren, deleteAlbum } from '../store/albumStore';
 import { COLORS } from '../constants';
-import { formatDateKorean, formatMonthYear } from '../utils/dateUtils';
+import { formatAlbumDate, formatMonthYear } from '../utils/dateUtils';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'AlbumList'>;
 type Route = RouteProp<RootStackParamList, 'AlbumList'>;
@@ -116,7 +116,7 @@ export default function AlbumListScreen() {
             <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
             <View style={styles.metaRow}>
               <Text style={styles.metaIcon}>📅</Text>
-              <Text style={styles.metaText}>{formatDateKorean(item.date)}</Text>
+              <Text style={styles.metaText}>{formatAlbumDate(item.date, item.dateEnd)}</Text>
             </View>
             {item.location ? (
               <View style={styles.metaRow}>
@@ -127,7 +127,11 @@ export default function AlbumListScreen() {
             {item.weatherEmoji ? (
               <View style={styles.metaRow}>
                 <Text style={styles.metaIcon}>{item.weatherEmoji}</Text>
-                <Text style={styles.metaText}>{item.photos.length}장의 사진</Text>
+                <Text style={styles.metaText}>
+                  {item.weather === 'other' && item.weatherCustom
+                    ? item.weatherCustom
+                    : item.photos.length + '장의 사진'}
+                </Text>
               </View>
             ) : (
               <Text style={styles.metaText}>📷 {item.photos.length}장의 사진</Text>

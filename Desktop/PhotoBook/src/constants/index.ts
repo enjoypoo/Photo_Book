@@ -41,6 +41,7 @@ export const WEATHER_OPTIONS: WeatherOption[] = [
   { type: 'windy', emoji: '🌬️', label: '바람' },
   { type: 'hot', emoji: '🥵', label: '더움' },
   { type: 'cold', emoji: '🥶', label: '추움' },
+  { type: 'other', emoji: '🌡️', label: '기타' },
 ];
 
 export const STORAGE_KEY = '@photobook_v2_albums';
@@ -48,5 +49,5 @@ export const CHILDREN_KEY = '@photobook_v2_children';
 
 export const WEATHER_LABEL: Record<string, string> = {
   sunny: '맑음', partly_cloudy: '구름 조금', cloudy: '흐림',
-  rainy: '비', snowy: '눈', windy: '바람', hot: '더움', cold: '추움',
+  rainy: '비', snowy: '눈', windy: '바람', hot: '더움', cold: '추움', other: '기타',
 };
