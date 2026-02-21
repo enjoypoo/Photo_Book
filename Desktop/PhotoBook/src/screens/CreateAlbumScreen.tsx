@@ -5,7 +5,6 @@ import {
   ActivityIndicator, SafeAreaView, StatusBar, Animated,
   Keyboard,
 } from 'react-native';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -41,7 +40,7 @@ function calcDateRange(photos: PhotoEntry[]): { date: string; dateEnd?: string }
   const minStr = new Date(Math.min(...dates)).toISOString();
   const maxStr = new Date(Math.max(...dates)).toISOString();
   const sameDay = toDateOnly(minStr) === toDateOnly(maxStr);
-  if (photos.length === 1) return { date: minStr };          // 1장: 날짜+시간
+  if (photos.length === 1) return { date: toDateOnly(minStr) };  // 1장: 날짜만
   if (sameDay)              return { date: toDateOnly(minStr) }; // 같은 날
   return { date: toDateOnly(minStr), dateEnd: toDateOnly(maxStr) }; // 기간
 }
@@ -53,7 +52,7 @@ export default function CreateAlbumScreen() {
   const isEdit = !!albumId;
 
   const [title, setTitle] = useState('');
-  const [date, setDate] = useState(getTodayISO());          // YYYY-MM-DD or ISO
+  const [date, setDate] = useState(getTodayISO());          // YYYY-MM-DD
   const [dateEnd, setDateEnd] = useState<string | undefined>();
   const [location, setLocation] = useState('');
   const [weather, setWeather] = useState<WeatherOption>(WEATHER_OPTIONS[0]);
@@ -64,11 +63,6 @@ export default function CreateAlbumScreen() {
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [saving, setSaving] = useState(false);
   const [exifApplied, setExifApplied] = useState(false);
-
-  // DateTimePicker 상태
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [pickerDate, setPickerDate] = useState(new Date());
 
   // 사진 BottomSheet 애니메이션
   const [photoSheetVisible, setPhotoSheetVisible] = useState(false);
@@ -89,7 +83,10 @@ export default function CreateAlbumScreen() {
     if (isEdit && albumId) {
       getAlbumById(albumId).then(album => {
         if (!album) return;
-        setTitle(album.title); setDate(album.date); setDateEnd(album.dateEnd);
+        setTitle(album.title);
+        // ISO 날짜를 YYYY-MM-DD로 변환
+        setDate(album.date.includes('T') ? album.date.split('T')[0] : album.date);
+        setDateEnd(album.dateEnd ? (album.dateEnd.includes('T') ? album.dateEnd.split('T')[0] : album.dateEnd) : undefined);
         setLocation(album.location); setStory(album.story); setPhotos(album.photos);
         const w = WEATHER_OPTIONS.find(o => o.type === album.weather) ?? WEATHER_OPTIONS[0];
         setWeather(w);
@@ -97,42 +94,6 @@ export default function CreateAlbumScreen() {
       });
     }
   }, [albumId]);
-
-  /* ── 날짜 표시 문자열 ─────────────────────────────── */
-  const dateDisplayStr = (): string => {
-    try {
-      if (date.includes('T')) {
-        // 1장 사진, 시간 포함
-        return formatDateTimeKorean(date);
-      }
-      return formatDateKorean(date);
-    } catch { return date; }
-  };
-
-  const endDateDisplayStr = (): string => {
-    if (!dateEnd) return '';
-    try { return formatDateKorean(dateEnd); } catch { return dateEnd; }
-  };
-
-  /* ── DateTimePicker 핸들러 ──────────────────────── */
-  const onDateChange = (_: DateTimePickerEvent, selected?: Date) => {
-    setShowDatePicker(false);
-    if (!selected) return;
-    // 기존에 시간 포함이었으면 시간 유지, 아니면 날짜만
-    if (date.includes('T')) {
-      const old = new Date(date);
-      selected.setHours(old.getHours(), old.getMinutes(), old.getSeconds());
-      setDate(selected.toISOString());
-    } else {
-      setDate(selected.toISOString().split('T')[0]);
-    }
-  };
-
-  const onEndDateChange = (_: DateTimePickerEvent, selected?: Date) => {
-    setShowEndDatePicker(false);
-    if (!selected) return;
-    setDateEnd(selected.toISOString().split('T')[0]);
-  };
 
   /* ── 사진 추가 (EXIF 날짜 자동 적용) ─────────────── */
   const applyPhotosWithExif = (newPhotos: PhotoEntry[], allPhotos: PhotoEntry[]) => {
@@ -197,9 +158,33 @@ export default function CreateAlbumScreen() {
     finally { setLoadingLocation(false); }
   };
 
+  /* ── YYYY-MM-DD 형식 검증 및 자동 포맷팅 ────────── */
+  const handleDateChange = (text: string, setter: (v: string) => void) => {
+    // 숫자만 추출
+    const nums = text.replace(/[^0-9]/g, '');
+    let formatted = nums;
+    if (nums.length >= 5) {
+      formatted = nums.slice(0, 4) + '-' + nums.slice(4);
+    }
+    if (nums.length >= 7) {
+      formatted = nums.slice(0, 4) + '-' + nums.slice(4, 6) + '-' + nums.slice(6, 8);
+    }
+    setter(formatted.slice(0, 10));
+  };
+
   /* ── 저장 ─────────────────────────────────────── */
   const handleSave = async () => {
     if (!title.trim()) { Alert.alert('알림', '제목을 입력해주세요.'); return; }
+    // 날짜 형식 검증
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      Alert.alert('알림', '날짜를 YYYY-MM-DD 형식으로 입력해주세요.\n예: 2024-03-15');
+      return;
+    }
+    if (dateEnd && !dateRegex.test(dateEnd)) {
+      Alert.alert('알림', '종료 날짜를 YYYY-MM-DD 형식으로 입력해주세요.\n예: 2024-03-20');
+      return;
+    }
     Keyboard.dismiss();
     setSaving(true);
     try {
@@ -250,7 +235,7 @@ export default function CreateAlbumScreen() {
           contentContainerStyle={styles.body}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"   // ← 스크롤 시 키보드 자동 닫기
+          keyboardDismissMode="on-drag"
         >
           {/* ── 제목 ── */}
           <Text style={styles.label}>앨범 제목 *</Text>
@@ -262,49 +247,39 @@ export default function CreateAlbumScreen() {
             returnKeyType="done" onSubmitEditing={Keyboard.dismiss}
           />
 
-          {/* ── 날짜 (달력 선택) ── */}
+          {/* ── 날짜 (TextInput YYYY-MM-DD) ── */}
           <Text style={styles.label}>날짜 *</Text>
           <View style={styles.dateRow}>
-            <TouchableOpacity
-              style={[styles.input, styles.dateBtn]}
-              onPress={() => { Keyboard.dismiss(); setPickerDate(new Date(date.split('T')[0])); setShowDatePicker(true); }}
-            >
-              <Text style={styles.dateBtnText}>{dateDisplayStr()}</Text>
-            </TouchableOpacity>
-            {dateEnd && (
+            <TextInput
+              style={[styles.input, styles.dateInput]}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={COLORS.textMuted}
+              value={date}
+              onChangeText={text => handleDateChange(text, setDate)}
+              keyboardType="numeric"
+              maxLength={10}
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+            />
+            {dateEnd !== undefined && (
               <>
                 <Text style={styles.dateSeparator}>~</Text>
-                <TouchableOpacity
-                  style={[styles.input, styles.dateBtnEnd]}
-                  onPress={() => { Keyboard.dismiss(); setPickerDate(new Date(dateEnd)); setShowEndDatePicker(true); }}
-                >
-                  <Text style={styles.dateBtnText}>{endDateDisplayStr()}</Text>
-                </TouchableOpacity>
+                <TextInput
+                  style={[styles.input, styles.dateInput]}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={dateEnd}
+                  onChangeText={text => handleDateChange(text, setDateEnd)}
+                  keyboardType="numeric"
+                  maxLength={10}
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                />
               </>
             )}
           </View>
           {exifApplied && (
             <Text style={styles.exifNote}>📷 사진 촬영 날짜가 자동으로 적용되었습니다</Text>
-          )}
-
-          {/* iOS DateTimePicker는 모달로, Android는 인라인으로 */}
-          {showDatePicker && (
-            <DateTimePicker
-              value={pickerDate}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={onDateChange}
-              maximumDate={new Date()}
-            />
-          )}
-          {showEndDatePicker && (
-            <DateTimePicker
-              value={pickerDate}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={onEndDateChange}
-              maximumDate={new Date()}
-            />
           )}
 
           {/* ── 위치 ── */}
@@ -428,7 +403,11 @@ export default function CreateAlbumScreen() {
 
       {/* ── 사진 추가 BottomSheet ── */}
       {photoSheetVisible && (
-        <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={hidePhotoSheet}>
+        <TouchableOpacity
+          style={styles.sheetOverlay}
+          activeOpacity={1}
+          onPress={hidePhotoSheet}
+        >
           <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
             <TouchableOpacity activeOpacity={1}>
               <View style={styles.sheetHandle} />
@@ -510,20 +489,19 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: '#fff', borderRadius: 12, borderWidth: 2, borderColor: '#E5E7EB',
     paddingHorizontal: 16, paddingVertical: 13, fontSize: 15, color: COLORS.text,
+    marginBottom: 16,
   },
   /* 날짜 */
-  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 13 },
-  dateBtnEnd: { flex: 1, paddingVertical: 13 },
-  dateIcon: { fontSize: 16 },
-  dateBtnText: { flex: 1, fontSize: 14, color: COLORS.text },
-  dateSeparator: { fontSize: 16, color: COLORS.textMuted, fontWeight: '500' },
-  exifNote: { fontSize: 12, color: COLORS.purple, marginTop: 6, fontWeight: '500' },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 0 },
+  dateInput: { flex: 1, marginBottom: 16 },
+  dateSeparator: { fontSize: 16, color: COLORS.textMuted, fontWeight: '500', marginBottom: 16 },
+  exifNote: { fontSize: 12, color: COLORS.purple, marginBottom: 8, fontWeight: '500' },
   /* 위치 */
-  rowInput: { flexDirection: 'row', gap: 8 },
+  rowInput: { flexDirection: 'row', gap: 8, marginBottom: 0 },
   gpsBtn: {
     width: 52, height: 52, borderRadius: 12, backgroundColor: '#fff',
     borderWidth: 2, borderColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center',
+    marginBottom: 16,
   },
   gpsBtnText: { fontSize: 22 },
   /* 날씨 */
@@ -538,7 +516,7 @@ const styles = StyleSheet.create({
   weatherLabelActive: { color: COLORS.purple },
   /* 이야기 */
   storyInput: { minHeight: 120, paddingTop: 13, marginBottom: 0 },
-  charCount: { fontSize: 11, color: COLORS.textMuted, textAlign: 'right', marginTop: 4 },
+  charCount: { fontSize: 11, color: COLORS.textMuted, textAlign: 'right', marginTop: 4, marginBottom: 0 },
   /* 사진 업로더 */
   photoUploaderBox: {
     width: '100%', height: 160,
@@ -597,10 +575,12 @@ const styles = StyleSheet.create({
   sheetOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end',
+    zIndex: 100,
   },
   sheet: {
     backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28,
     padding: 20, paddingBottom: TAB_BAR_HEIGHT + 20,
+    zIndex: 101,
   },
   sheetHandle: { width: 40, height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   sheetTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text, marginBottom: 20 },
