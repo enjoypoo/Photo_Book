@@ -60,6 +60,8 @@ export default function ExportPDFScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const preselectedIds = route.params?.albumIds ?? [];
+  // 특정 앨범을 선택해서 진입했는지 여부
+  const hasPreselected = preselectedIds.length > 0;
   const insets = useSafeAreaInsets();
 
   const [albums, setAlbums] = useState<Album[]>([]);
@@ -68,6 +70,8 @@ export default function ExportPDFScreen() {
   const [progress, setProgress] = useState<{ current: number; total: number; albumTitle: string } | null>(null);
   const [pageSize, setPageSize] = useState<PageSize>('A5');
   const [layout, setLayout] = useState<LayoutType>('feature');
+  // 선택 진입 시: 선택된 앨범만 표시 / false면 전체 표시
+  const [showSelectedOnly, setShowSelectedOnly] = useState(hasPreselected);
 
   useEffect(() => {
     loadAlbums().then((data) => {
@@ -89,6 +93,11 @@ export default function ExportPDFScreen() {
 
   const selectAll = () => setSelected(new Set(albums.map((a) => a.id)));
   const clearAll = () => setSelected(new Set());
+
+  // 현재 표시할 앨범 목록 (선택된 것만 or 전체)
+  const displayedAlbums = showSelectedOnly
+    ? albums.filter((a) => selected.has(a.id))
+    : albums;
 
   const handleGenerate = async () => {
     if (selected.size === 0) {
@@ -123,17 +132,23 @@ export default function ExportPDFScreen() {
           <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>📄 PDF 내보내기</Text>
-        <TouchableOpacity
-          onPress={selected.size === albums.length ? clearAll : selectAll}
-        >
-          <Text style={styles.selectAllText}>
-            {selected.size === albums.length ? '전체 해제' : '전체 선택'}
-          </Text>
-        </TouchableOpacity>
+        {showSelectedOnly ? (
+          /* 선택된 앨범만 보기 모드: 앨범 추가 버튼 */
+          <TouchableOpacity onPress={() => setShowSelectedOnly(false)}>
+            <Text style={styles.selectAllText}>+ 앨범 추가</Text>
+          </TouchableOpacity>
+        ) : (
+          /* 전체 보기 모드: 전체선택/해제 */
+          <TouchableOpacity onPress={selected.size === albums.length ? clearAll : selectAll}>
+            <Text style={styles.selectAllText}>
+              {selected.size === albums.length ? '전체 해제' : '전체 선택'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <FlatList
-        data={albums}
+        data={displayedAlbums}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
@@ -199,8 +214,20 @@ export default function ExportPDFScreen() {
               </ScrollView>
             </View>
 
-            {/* 앨범 선택 헤더 */}
-            <Text style={styles.sectionTitle}>📚 앨범 선택</Text>
+            {/* 앨범 섹션 헤더 */}
+            <View style={styles.albumSectionHeader}>
+              <Text style={styles.sectionTitle}>
+                {showSelectedOnly ? `📚 선택된 앨범 (${selected.size}개)` : `📚 전체 앨범 (${albums.length}개)`}
+              </Text>
+              {!showSelectedOnly && selected.size > 0 && (
+                <TouchableOpacity
+                  onPress={() => setShowSelectedOnly(true)}
+                  style={styles.showSelectedBtn}
+                >
+                  <Text style={styles.showSelectedBtnText}>선택만 보기</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </>
         }
         renderItem={({ item }) => {
@@ -246,8 +273,18 @@ export default function ExportPDFScreen() {
         }}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>📭</Text>
-            <Text style={styles.emptyText}>앨범이 없습니다.</Text>
+            <Text style={styles.emptyIcon}>{showSelectedOnly ? '☑️' : '📭'}</Text>
+            <Text style={styles.emptyText}>
+              {showSelectedOnly ? '선택된 앨범이 없습니다.' : '앨범이 없습니다.'}
+            </Text>
+            {showSelectedOnly && (
+              <TouchableOpacity
+                style={styles.emptyAddBtn}
+                onPress={() => setShowSelectedOnly(false)}
+              >
+                <Text style={styles.emptyAddBtnText}>+ 앨범 선택하러 가기</Text>
+              </TouchableOpacity>
+            )}
           </View>
         }
       />
@@ -270,14 +307,27 @@ export default function ExportPDFScreen() {
         </View>
         {/* 진행상황 표시 */}
         {generating && progress && (
-          <View style={styles.progressBar}>
-            <View style={[
-              styles.progressFill,
-              { width: `${Math.round((progress.current / progress.total) * 100)}%` as any }
-            ]} />
-            <Text style={styles.progressText}>
-              {progress.current}/{progress.total} 「{progress.albumTitle}」 PDF 생성 중...
-            </Text>
+          <View>
+            <View style={styles.progressBar}>
+              <View style={[
+                styles.progressFill,
+                { width: `${Math.round((progress.current / progress.total) * 100)}%` as any }
+              ]} />
+              <Text style={styles.progressText}>
+                {progress.current}/{progress.total} 「{progress.albumTitle}」 PDF 생성 중...
+              </Text>
+            </View>
+            <View style={styles.progressPercentRow}>
+              <View style={styles.progressTrack}>
+                <View style={[
+                  styles.progressThumb,
+                  { width: `${Math.round((progress.current / progress.total) * 100)}%` as any }
+                ]} />
+              </View>
+              <Text style={styles.progressPercent}>
+                {Math.round((progress.current / progress.total) * 100)}%
+              </Text>
+            </View>
           </View>
         )}
 
@@ -436,6 +486,23 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', paddingTop: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { fontSize: 15, color: COLORS.textMuted },
+  emptyAddBtn: {
+    marginTop: 16, paddingHorizontal: 20, paddingVertical: 10,
+    backgroundColor: COLORS.purple, borderRadius: 20,
+  },
+  emptyAddBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+
+  /* ── 앨범 섹션 헤더 ── */
+  albumSectionHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingRight: 16,
+  },
+  showSelectedBtn: {
+    paddingHorizontal: 12, paddingVertical: 5,
+    backgroundColor: COLORS.pinkPastel, borderRadius: 14,
+    borderWidth: 1, borderColor: COLORS.pink,
+  },
+  showSelectedBtnText: { fontSize: 12, color: COLORS.pink, fontWeight: '600' },
 
   /* ── 푸터 ── */
   footer: {
@@ -464,6 +531,7 @@ const styles = StyleSheet.create({
     height: 36, borderRadius: 12,
     backgroundColor: COLORS.bgPurple,
     overflow: 'hidden', justifyContent: 'center',
+    marginBottom: 6,
   },
   progressFill: {
     position: 'absolute', top: 0, left: 0, bottom: 0,
@@ -472,5 +540,19 @@ const styles = StyleSheet.create({
   progressText: {
     fontSize: 12, fontWeight: '600', color: COLORS.purple,
     textAlign: 'center', paddingHorizontal: 8,
+  },
+  progressPercentRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2,
+  },
+  progressTrack: {
+    flex: 1, height: 6, borderRadius: 3,
+    backgroundColor: COLORS.border, overflow: 'hidden',
+  },
+  progressThumb: {
+    height: 6, borderRadius: 3,
+    backgroundColor: COLORS.purple,
+  },
+  progressPercent: {
+    fontSize: 12, fontWeight: '800', color: COLORS.purple, minWidth: 34, textAlign: 'right',
   },
 });
