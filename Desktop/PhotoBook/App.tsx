@@ -4,7 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import {
   View, Text, TouchableOpacity, Platform, StyleSheet,
-  Modal, Animated, FlatList, Image,
+  Animated, FlatList, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -113,38 +113,56 @@ function TabIconView({ name, active }: { name: string; active: boolean }) {
     );
   }
 
-  // 설정 아이콘 - 톱니바퀴
+  // 설정 아이콘 - 기어 모양 (원형 테두리 + 6개 돌기 + 중앙 원 구멍)
+  const gearSize = 20;
+  const toothPositions = [0, 60, 120, 180, 240, 300]; // 6방향 돌기
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ position: 'absolute', width: 20, height: 20, alignItems: 'center', justifyContent: 'center' }}>
-        {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => {
-          const rad = (angle * Math.PI) / 180;
-          const x = Math.cos(rad) * 8;
-          const y = Math.sin(rad) * 8;
+      <View style={{ width: gearSize, height: gearSize, alignItems: 'center', justifyContent: 'center' }}>
+        {/* 바깥 원 (기어 몸체) */}
+        <View style={{
+          position: 'absolute',
+          width: gearSize, height: gearSize, borderRadius: gearSize / 2,
+          backgroundColor: color,
+        }} />
+        {/* 6개 돌기 */}
+        {toothPositions.map((deg) => {
+          const rad = (deg * Math.PI) / 180;
+          const offset = gearSize * 0.28;
+          const tx = Math.sin(rad) * offset;
+          const ty = -Math.cos(rad) * offset;
+          const isVertical = deg === 0 || deg === 180;
           return (
             <View
-              key={angle}
+              key={deg}
               style={{
                 position: 'absolute',
-                width: 5, height: 5,
-                borderRadius: 1.5,
+                width: isVertical ? 4.5 : 3.5,
+                height: isVertical ? 3.5 : 4.5,
+                borderRadius: 1,
                 backgroundColor: color,
-                transform: [{ translateX: x - 2.5 }, { translateY: y - 2.5 }, { rotate: `${angle}deg` }],
+                transform: [
+                  { translateX: tx },
+                  { translateY: ty },
+                  { rotate: `${deg}deg` },
+                ],
               }}
             />
           );
         })}
+        {/* 중앙 원 구멍 */}
         <View style={{
-          width: 9, height: 9, borderRadius: 4.5,
-          borderWidth: 2, borderColor: color,
-          backgroundColor: 'transparent',
+          position: 'absolute',
+          width: gearSize * 0.42, height: gearSize * 0.42,
+          borderRadius: gearSize * 0.21,
+          backgroundColor: active ? COLORS.gradientStart : '#fff',
         }} />
       </View>
     </View>
   );
 }
 
-/* ── 추가 바텀시트 (그룹/앨범 선택) ── */
+/* ── 추가 바텀시트 (그룹/앨범 선택) - 탭바 위에 떠서 탭바가 항상 보임 ── */
 interface AddBottomSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -153,19 +171,28 @@ interface AddBottomSheetProps {
 
 function AddBottomSheet({ visible, onClose, navigation }: AddBottomSheetProps) {
   const sheetAnim = useRef(new Animated.Value(0)).current;
+  const dimAnim = useRef(new Animated.Value(0)).current;
   const [step, setStep] = useState<'select' | 'group-list'>('select');
   const [children, setChildren] = useState<Child[]>([]);
+  const [mounted, setMounted] = useState(false);
 
   React.useEffect(() => {
     if (visible) {
       setStep('select');
-      Animated.spring(sheetAnim, { toValue: 1, damping: 20, useNativeDriver: true }).start();
+      setMounted(true);
+      Animated.parallel([
+        Animated.spring(sheetAnim, { toValue: 1, damping: 20, useNativeDriver: true }),
+        Animated.timing(dimAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]).start();
     } else {
-      Animated.timing(sheetAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start();
+      Animated.parallel([
+        Animated.timing(sheetAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(dimAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
+      ]).start(() => setMounted(false));
     }
   }, [visible]);
 
-  const translateY = sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [400, 0] });
+  const translateY = sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [600, 0] });
 
   const handleAddGroup = () => {
     onClose();
@@ -187,149 +214,144 @@ function AddBottomSheet({ visible, onClose, navigation }: AddBottomSheetProps) {
     }, 250);
   };
 
-  if (!visible) return null;
+  if (!mounted) return null;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      {/* 배경 딤 */}
-      <TouchableOpacity
-        style={addSheetStyles.overlay}
-        activeOpacity={1}
-        onPress={onClose}
+    /* 전체 화면 딤 + 시트 - position absolute로 탭바 위에 렌더링 */
+    <View style={addSheetStyles.container} pointerEvents="box-none">
+      {/* 딤 배경 (탭바 위까지 덮음) */}
+      <Animated.View
+        style={[addSheetStyles.dim, { opacity: dimAnim }]}
+        pointerEvents={visible ? 'auto' : 'none'}
       >
-        <Animated.View
-          style={[addSheetStyles.sheet, { transform: [{ translateY }] }]}
-        >
-          {/* 터치 이벤트 시트 안으로 막기 */}
-          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-            {/* 핸들 */}
-            <View style={addSheetStyles.handle} />
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+      </Animated.View>
 
-            {step === 'select' ? (
-              /* ── 1단계: 그룹 추가 / 앨범 추가 선택 ── */
-              <>
-                <Text style={addSheetStyles.title}>무엇을 추가할까요?</Text>
+      {/* 시트 - 탭바 바로 위에 위치 */}
+      <Animated.View
+        style={[addSheetStyles.sheet, { transform: [{ translateY }] }]}
+        pointerEvents="box-none"
+      >
+        <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+          {/* 핸들 */}
+          <View style={addSheetStyles.handle} />
 
-                {/* 그룹 추가 */}
-                <TouchableOpacity style={addSheetStyles.row} onPress={handleAddGroup} activeOpacity={0.8}>
-                  <LinearGradient
-                    colors={[COLORS.gradientStart, COLORS.gradientEnd]}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                    style={addSheetStyles.rowIconBox}
-                  >
-                    <Text style={addSheetStyles.rowIconText}>👥</Text>
-                  </LinearGradient>
-                  <View style={{ flex: 1 }}>
-                    <Text style={addSheetStyles.rowTitle}>그룹 추가</Text>
-                    <Text style={addSheetStyles.rowSub}>새로운 그룹(인물)을 만들어요</Text>
-                  </View>
-                  <Text style={addSheetStyles.rowChevron}>›</Text>
-                </TouchableOpacity>
+          {step === 'select' ? (
+            <>
+              <Text style={addSheetStyles.title}>무엇을 추가할까요?</Text>
 
-                {/* 앨범 추가 */}
-                <TouchableOpacity style={addSheetStyles.row} onPress={handleAddAlbum} activeOpacity={0.8}>
-                  <LinearGradient
-                    colors={['#818CF8', '#A78BFA']}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                    style={addSheetStyles.rowIconBox}
-                  >
-                    <Text style={addSheetStyles.rowIconText}>📚</Text>
-                  </LinearGradient>
-                  <View style={{ flex: 1 }}>
-                    <Text style={addSheetStyles.rowTitle}>앨범 추가</Text>
-                    <Text style={addSheetStyles.rowSub}>그룹에 새 앨범을 만들어요</Text>
-                  </View>
-                  <Text style={addSheetStyles.rowChevron}>›</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              /* ── 2단계: 그룹 선택 ── */
-              <>
-                <View style={addSheetStyles.stepHeader}>
-                  <TouchableOpacity onPress={() => setStep('select')} style={addSheetStyles.backBtn}>
-                    <Text style={addSheetStyles.backBtnText}>←</Text>
-                  </TouchableOpacity>
-                  <Text style={addSheetStyles.title}>어떤 그룹에 추가할까요?</Text>
+              {/* 그룹 추가 */}
+              <TouchableOpacity style={addSheetStyles.row} onPress={handleAddGroup} activeOpacity={0.8}>
+                <LinearGradient
+                  colors={[COLORS.gradientStart, COLORS.gradientEnd]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={addSheetStyles.rowIconBox}
+                >
+                  <Text style={addSheetStyles.rowIconText}>👥</Text>
+                </LinearGradient>
+                <View style={{ flex: 1 }}>
+                  <Text style={addSheetStyles.rowTitle}>그룹 추가</Text>
+                  <Text style={addSheetStyles.rowSub}>새로운 그룹(인물)을 만들어요</Text>
                 </View>
+                <Text style={addSheetStyles.rowChevron}>›</Text>
+              </TouchableOpacity>
 
-                {children.length === 0 ? (
-                  <View style={addSheetStyles.emptyGroup}>
-                    <Text style={addSheetStyles.emptyGroupIcon}>👥</Text>
-                    <Text style={addSheetStyles.emptyGroupText}>
-                      먼저 그룹을 만들어주세요!
-                    </Text>
+              {/* 앨범 추가 */}
+              <TouchableOpacity style={addSheetStyles.row} onPress={handleAddAlbum} activeOpacity={0.8}>
+                <LinearGradient
+                  colors={['#818CF8', '#A78BFA']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={addSheetStyles.rowIconBox}
+                >
+                  <Text style={addSheetStyles.rowIconText}>📚</Text>
+                </LinearGradient>
+                <View style={{ flex: 1 }}>
+                  <Text style={addSheetStyles.rowTitle}>앨범 추가</Text>
+                  <Text style={addSheetStyles.rowSub}>그룹에 새 앨범을 만들어요</Text>
+                </View>
+                <Text style={addSheetStyles.rowChevron}>›</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <View style={addSheetStyles.stepHeader}>
+                <TouchableOpacity onPress={() => setStep('select')} style={addSheetStyles.backBtn}>
+                  <Text style={addSheetStyles.backBtnText}>←</Text>
+                </TouchableOpacity>
+                <Text style={addSheetStyles.title}>어떤 그룹에 추가할까요?</Text>
+              </View>
+
+              {children.length === 0 ? (
+                <View style={addSheetStyles.emptyGroup}>
+                  <Text style={addSheetStyles.emptyGroupIcon}>👥</Text>
+                  <Text style={addSheetStyles.emptyGroupText}>먼저 그룹을 만들어주세요!</Text>
+                  <TouchableOpacity style={addSheetStyles.emptyGroupBtn} onPress={handleAddGroup}>
+                    <Text style={addSheetStyles.emptyGroupBtnText}>+ 그룹 만들기</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <FlatList
+                  data={children}
+                  keyExtractor={c => c.id}
+                  style={{ maxHeight: 280 }}
+                  showsVerticalScrollIndicator={false}
+                  renderItem={({ item }) => (
                     <TouchableOpacity
-                      style={addSheetStyles.emptyGroupBtn}
-                      onPress={handleAddGroup}
+                      style={[addSheetStyles.groupRow, { backgroundColor: item.color + '12' }]}
+                      onPress={() => handleSelectGroup(item.id)}
+                      activeOpacity={0.8}
                     >
-                      <Text style={addSheetStyles.emptyGroupBtnText}>+ 그룹 만들기</Text>
+                      {item.photoUri ? (
+                        <Image source={{ uri: item.photoUri }} style={addSheetStyles.groupAvatar} />
+                      ) : (
+                        <View style={[addSheetStyles.groupEmojiBox, { backgroundColor: item.color + '28' }]}>
+                          <Text style={addSheetStyles.groupEmoji}>{item.emoji}</Text>
+                        </View>
+                      )}
+                      <View style={[addSheetStyles.colorDot, { backgroundColor: item.color }]} />
+                      <Text style={addSheetStyles.groupName} numberOfLines={1}>{item.name}</Text>
+                      <Text style={addSheetStyles.rowChevron}>›</Text>
                     </TouchableOpacity>
-                  </View>
-                ) : (
-                  <FlatList
-                    data={children}
-                    keyExtractor={c => c.id}
-                    style={{ maxHeight: 320 }}
-                    showsVerticalScrollIndicator={false}
-                    renderItem={({ item }) => (
-                      <TouchableOpacity
-                        style={[addSheetStyles.groupRow, { backgroundColor: item.color + '12' }]}
-                        onPress={() => handleSelectGroup(item.id)}
-                        activeOpacity={0.8}
-                      >
-                        {/* 아바타 */}
-                        {item.photoUri ? (
-                          <Image
-                            source={{ uri: item.photoUri }}
-                            style={addSheetStyles.groupAvatar}
-                          />
-                        ) : (
-                          <View style={[addSheetStyles.groupEmojiBox, { backgroundColor: item.color + '28' }]}>
-                            <Text style={addSheetStyles.groupEmoji}>{item.emoji}</Text>
-                          </View>
-                        )}
-                        {/* 색상 점 */}
-                        <View style={[addSheetStyles.colorDot, { backgroundColor: item.color }]} />
-                        {/* 이름 */}
-                        <Text style={addSheetStyles.groupName} numberOfLines={1}>{item.name}</Text>
-                        <Text style={addSheetStyles.rowChevron}>›</Text>
-                      </TouchableOpacity>
-                    )}
-                  />
-                )}
-              </>
-            )}
+                  )}
+                />
+              )}
+            </>
+          )}
 
-            {/* 하단 여백 */}
-            <View style={{ height: Platform.OS === 'ios' ? 20 : 8 }} />
-          </TouchableOpacity>
-        </Animated.View>
-      </TouchableOpacity>
-    </Modal>
+          {/* 하단 여백 */}
+          <View style={{ height: Platform.OS === 'ios' ? 16 : 8 }} />
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
   );
 }
 
 const addSheetStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+  /* 전체 화면을 덮는 컨테이너 (탭바 포함한 전체) */
+  container: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
     justifyContent: 'flex-end',
+    zIndex: 50,
+    elevation: 50,
   },
+  /* 딤 배경 */
+  dim: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  /* 시트: 탭바 바로 위에 */
   sheet: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? TAB_BAR_HEIGHT + 8 : TAB_BAR_HEIGHT + 4,
+    paddingBottom: TAB_BAR_HEIGHT + (Platform.OS === 'ios' ? 8 : 4),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12, shadowRadius: 16, elevation: 20,
+    shadowOpacity: 0.15, shadowRadius: 20, elevation: 60,
+    zIndex: 51,
   },
   handle: {
     width: 40, height: 4, backgroundColor: '#E5E7EB',
@@ -410,12 +432,16 @@ function CustomTabBar({ state, navigation }: any) {
   const [addSheetVisible, setAddSheetVisible] = useState(false);
 
   return (
-    <>
+    /* View가 탭바 + 시트 모두를 포함하는 컨테이너 역할 */
+    <View style={tabStyles.outerWrapper} pointerEvents="box-none">
+      {/* AddBottomSheet: 탭바보다 위에 absolute로 표시, 탭바는 항상 보임 */}
       <AddBottomSheet
         visible={addSheetVisible}
         onClose={() => setAddSheetVisible(false)}
         navigation={navigation}
       />
+
+      {/* 탭바 본체 */}
       <View style={tabStyles.wrapper}>
         <View style={tabStyles.bar}>
           {TAB_ITEMS.map((tab, index) => {
@@ -458,7 +484,7 @@ function CustomTabBar({ state, navigation }: any) {
           })}
         </View>
       </View>
-    </>
+    </View>
   );
 }
 
@@ -486,6 +512,11 @@ export default function App() {
 }
 
 const tabStyles = StyleSheet.create({
+  /* 탭바 + 시트를 모두 감싸는 절대 위치 컨테이너 */
+  outerWrapper: {
+    position: 'absolute', bottom: 0, left: 0, right: 0, top: 0,
+    pointerEvents: 'box-none',
+  },
   wrapper: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     shadowColor: '#000',

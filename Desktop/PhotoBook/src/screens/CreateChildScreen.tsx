@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, SafeAreaView, StatusBar, Alert, Image,
-  Animated, Keyboard,
+  Animated, Keyboard, Modal, Platform, FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -17,7 +17,12 @@ import { COLORS } from '../constants';
 type Nav = NativeStackNavigationProp<RootStackParamList, 'CreateChild'>;
 type Route = RouteProp<RootStackParamList, 'CreateChild'>;
 
-const EMOJIS = ['👨‍👩‍👧','👫','👦','👧','💼','🎉','🌟','🦋','🌈','🍀','🎠','🐣'];
+const EMOJIS = [
+  '👨‍👩‍👧','👫','👦','👧','💼','🎉','🌟','🦋','🌈','🍀',
+  '🎠','🐣','🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼',
+  '🌸','🌺','🌻','🌷','🎂','🎁','🎈','🎀','💎','🏆',
+  '⭐','🌙','☀️','🌈','❤️','💕','💖','🎵','📚','🎮',
+];
 const PALETTE = ['#F472B6','#C084FC','#60A5FA','#34D399','#FBBF24','#F87171','#FB923C','#A78BFA'];
 
 const GROUP_TYPES: { type: GroupType; label: string; emoji: string }[] = [
@@ -41,13 +46,17 @@ export default function CreateChildScreen() {
   const [groupType, setGroupType] = useState<GroupType>('child');
   const [groupTypeCustom, setGroupTypeCustom] = useState('');
   const [birthDate, setBirthDate] = useState('');
+
+  // Modal 상태
   const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [showAvatarSheet, setShowAvatarSheet] = useState(false);
-  const [showEmojiGrid, setShowEmojiGrid] = useState(false);
+  const [showEmojiModal, setShowEmojiModal] = useState(false);  // ← 이모지 전용 Modal
 
   const sheetAnim = useRef(new Animated.Value(0)).current;
   const groupAnim = useRef(new Animated.Value(0)).current;
+  const emojiAnim = useRef(new Animated.Value(0)).current;
 
+  /* ── 바텀시트 애니메이션 유틸 ── */
   const openSheet = (setter: (v: boolean) => void, anim: Animated.Value) => {
     Keyboard.dismiss();
     setter(true);
@@ -75,27 +84,33 @@ export default function CreateChildScreen() {
     }
   }, [editId]);
 
-  /* ── 대표 이미지 선택 ── */
-  const pickPhoto = async (camera: boolean) => {
-    closeSheet(setShowAvatarSheet, sheetAnim, async () => {
-      if (camera) {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') { Alert.alert('권한 필요', '카메라 접근 권한이 필요합니다.'); return; }
-        const result = await ImagePicker.launchCameraAsync({ quality: 0.75, allowsEditing: true, aspect: [1, 1] });
-        if (!result.canceled) { setPhotoUri(result.assets[0].uri); setShowEmojiGrid(false); }
-      } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') { Alert.alert('권한 필요', '사진 앨범 접근 권한이 필요합니다.'); return; }
-        const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.75, allowsEditing: true, aspect: [1, 1] });
-        if (!result.canceled) { setPhotoUri(result.assets[0].uri); setShowEmojiGrid(false); }
-      }
+  /* ── 대표 이미지: 카메라/갤러리 ── */
+  const pickPhoto = (camera: boolean) => {
+    // Modal 닫기 애니메이션(200ms) 완료 후 ImagePicker 실행
+    // (Modal이 완전히 닫히기 전에 다른 네이티브 뷰를 열면 iOS에서 차단됨)
+    closeSheet(setShowAvatarSheet, sheetAnim, () => {
+      setTimeout(async () => {
+        if (camera) {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') { Alert.alert('권한 필요', '카메라 접근 권한이 필요합니다.'); return; }
+          const result = await ImagePicker.launchCameraAsync({ quality: 0.75, allowsEditing: true, aspect: [1, 1] });
+          if (!result.canceled) setPhotoUri(result.assets[0].uri);
+        } else {
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== 'granted') { Alert.alert('권한 필요', '사진 앨범 접근 권한이 필요합니다.'); return; }
+          const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.75, allowsEditing: true, aspect: [1, 1] });
+          if (!result.canceled) setPhotoUri(result.assets[0].uri);
+        }
+      }, 300); // Modal 완전히 닫힌 후 실행
     });
   };
 
-  const openEmojiSelect = () => {
+  /* ── 이모지 선택 팝업 열기 ── */
+  const openEmojiModal = () => {
+    // 아바타 시트 닫고 → 이모지 모달 열기
     closeSheet(setShowAvatarSheet, sheetAnim, () => {
       setPhotoUri(undefined);
-      setShowEmojiGrid(true);
+      openSheet(setShowEmojiModal, emojiAnim);
     });
   };
 
@@ -130,8 +145,9 @@ export default function CreateChildScreen() {
   };
 
   const selectedGroup = GROUP_TYPES.find(g => g.type === groupType)!;
-  const sheetTranslateY = sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [320, 0] });
+  const sheetTranslateY = sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [400, 0] });
   const groupTranslateY = groupAnim.interpolate({ inputRange: [0, 1], outputRange: [400, 0] });
+  const emojiTranslateY = emojiAnim.interpolate({ inputRange: [0, 1], outputRange: [500, 0] });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -154,7 +170,7 @@ export default function CreateChildScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
-        {/* 미리보기 (그라디언트) */}
+        {/* 미리보기 */}
         <LinearGradient
           colors={[color + 'DD', color + '88'] as [string, string]}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -192,7 +208,7 @@ export default function CreateChildScreen() {
           returnKeyType="done" onSubmitEditing={Keyboard.dismiss}
         />
 
-        {/* 구분 풀다운 */}
+        {/* 구분 */}
         <Text style={[styles.label, { marginTop: 20 }]}>구분</Text>
         <TouchableOpacity
           style={styles.dropdownBtn}
@@ -213,7 +229,7 @@ export default function CreateChildScreen() {
           />
         )}
 
-        {/* 생성일 (선택) */}
+        {/* 생성일 */}
         <Text style={[styles.label, { marginTop: 20 }]}>생성일 (선택)</Text>
         <TextInput
           style={styles.input} placeholder="YYYY-MM-DD"
@@ -235,24 +251,6 @@ export default function CreateChildScreen() {
           ))}
         </View>
 
-        {/* 이모지 선택 (사진 없을 때 or 이모지 선택 시) */}
-        {showEmojiGrid && (
-          <>
-            <Text style={[styles.label, { marginTop: 4 }]}>이모지 선택</Text>
-            <View style={styles.emojiGrid}>
-              {EMOJIS.map(e => (
-                <TouchableOpacity
-                  key={e}
-                  style={[styles.emojiBtn, emoji === e && { borderColor: color, backgroundColor: color + '18' }]}
-                  onPress={() => setEmoji(e)}
-                >
-                  <Text style={{ fontSize: 26 }}>{e}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </>
-        )}
-
         {/* 저장 버튼 */}
         <View style={styles.saveBtnWrap}>
           <LinearGradient
@@ -267,36 +265,21 @@ export default function CreateChildScreen() {
         </View>
       </ScrollView>
 
-      {/* 구분 선택 BottomSheet */}
-      {showGroupPicker && (
-        <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1}
-          onPress={() => closeSheet(setShowGroupPicker, groupAnim)}>
-          <Animated.View style={[styles.sheet, { transform: [{ translateY: groupTranslateY }] }]}>
-            <TouchableOpacity activeOpacity={1}>
-              <View style={styles.sheetHandle} />
-              <Text style={styles.sheetTitle}>구분 선택</Text>
-              {GROUP_TYPES.map(g => (
-                <TouchableOpacity
-                  key={g.type}
-                  style={[styles.groupRow, groupType === g.type && styles.groupRowActive]}
-                  onPress={() => { setGroupType(g.type); closeSheet(setShowGroupPicker, groupAnim); }}
-                >
-                  <Text style={styles.groupRowEmoji}>{g.emoji}</Text>
-                  <Text style={[styles.groupRowLabel, groupType === g.type && { color: COLORS.purple, fontWeight: '700' }]}>
-                    {g.label}
-                  </Text>
-                  {groupType === g.type && <Text style={{ color: COLORS.purple, fontWeight: '700' }}>✓</Text>}
-                </TouchableOpacity>
-              ))}
-            </TouchableOpacity>
-          </Animated.View>
-        </TouchableOpacity>
-      )}
-
-      {/* 아바타 선택 BottomSheet (카메라 / 갤러리 / 이모지) */}
-      {showAvatarSheet && (
-        <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1}
-          onPress={() => closeSheet(setShowAvatarSheet, sheetAnim)}>
+      {/* ══════════════════════════════════════
+          Modal 1: 대표 이미지 선택
+      ══════════════════════════════════════ */}
+      <Modal
+        visible={showAvatarSheet}
+        transparent
+        animationType="none"
+        onRequestClose={() => closeSheet(setShowAvatarSheet, sheetAnim)}
+        statusBarTranslucent
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => closeSheet(setShowAvatarSheet, sheetAnim)}
+        >
           <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
             <TouchableOpacity activeOpacity={1}>
               <View style={styles.sheetHandle} />
@@ -310,6 +293,7 @@ export default function CreateChildScreen() {
                   <Text style={styles.sheetRowTitle}>카메라로 촬영</Text>
                   <Text style={styles.sheetRowSub}>지금 바로 사진 찍기</Text>
                 </View>
+                <Text style={styles.sheetRowChevron}>›</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.sheetRow} onPress={() => pickPhoto(false)}>
@@ -320,9 +304,10 @@ export default function CreateChildScreen() {
                   <Text style={styles.sheetRowTitle}>갤러리에서 선택</Text>
                   <Text style={styles.sheetRowSub}>앨범에서 사진 선택</Text>
                 </View>
+                <Text style={styles.sheetRowChevron}>›</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.sheetRow} onPress={openEmojiSelect}>
+              <TouchableOpacity style={styles.sheetRow} onPress={openEmojiModal}>
                 <View style={[styles.sheetIconBox, { backgroundColor: '#FFF7ED' }]}>
                   <Text style={styles.sheetIconText}>😊</Text>
                 </View>
@@ -330,6 +315,7 @@ export default function CreateChildScreen() {
                   <Text style={styles.sheetRowTitle}>이모지 선택</Text>
                   <Text style={styles.sheetRowSub}>이모지로 대표 이미지 설정</Text>
                 </View>
+                <Text style={styles.sheetRowChevron}>›</Text>
               </TouchableOpacity>
 
               {photoUri && (
@@ -346,10 +332,117 @@ export default function CreateChildScreen() {
                   </View>
                 </TouchableOpacity>
               )}
+
+              <View style={{ height: Platform.OS === 'ios' ? 24 : 12 }} />
             </TouchableOpacity>
           </Animated.View>
         </TouchableOpacity>
-      )}
+      </Modal>
+
+      {/* ══════════════════════════════════════
+          Modal 2: 이모지 선택 팝업
+      ══════════════════════════════════════ */}
+      <Modal
+        visible={showEmojiModal}
+        transparent
+        animationType="none"
+        onRequestClose={() => closeSheet(setShowEmojiModal, emojiAnim)}
+        statusBarTranslucent
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => closeSheet(setShowEmojiModal, emojiAnim)}
+        >
+          <Animated.View style={[styles.emojiSheet, { transform: [{ translateY: emojiTranslateY }] }]}>
+            <TouchableOpacity activeOpacity={1}>
+              <View style={styles.sheetHandle} />
+
+              {/* 이모지 시트 헤더 */}
+              <View style={styles.emojiSheetHeader}>
+                <Text style={styles.sheetTitle}>이모지 선택</Text>
+                <TouchableOpacity
+                  style={[styles.emojiDoneBtn, { backgroundColor: color }]}
+                  onPress={() => closeSheet(setShowEmojiModal, emojiAnim)}
+                >
+                  <Text style={styles.emojiDoneBtnText}>완료</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* 현재 선택된 이모지 미리보기 */}
+              <View style={[styles.emojiCurrentWrap, { backgroundColor: color + '18' }]}>
+                <View style={[styles.emojiCurrentBox, { backgroundColor: color + '30' }]}>
+                  <Text style={styles.emojiCurrentIcon}>{emoji}</Text>
+                </View>
+                <Text style={[styles.emojiCurrentLabel, { color }]}>선택된 이모지</Text>
+              </View>
+
+              {/* 이모지 그리드 */}
+              <FlatList
+                data={EMOJIS}
+                keyExtractor={e => e}
+                numColumns={7}
+                scrollEnabled
+                style={styles.emojiList}
+                contentContainerStyle={styles.emojiListContent}
+                showsVerticalScrollIndicator={false}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.emojiGridBtn,
+                      item === emoji && { backgroundColor: color + '25', borderColor: color, borderWidth: 2 },
+                    ]}
+                    onPress={() => setEmoji(item)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.emojiGridIcon}>{item}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+
+              <View style={{ height: Platform.OS === 'ios' ? 24 : 12 }} />
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ══════════════════════════════════════
+          Modal 3: 구분 선택
+      ══════════════════════════════════════ */}
+      <Modal
+        visible={showGroupPicker}
+        transparent
+        animationType="none"
+        onRequestClose={() => closeSheet(setShowGroupPicker, groupAnim)}
+        statusBarTranslucent
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => closeSheet(setShowGroupPicker, groupAnim)}
+        >
+          <Animated.View style={[styles.sheet, { transform: [{ translateY: groupTranslateY }] }]}>
+            <TouchableOpacity activeOpacity={1}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>구분 선택</Text>
+              {GROUP_TYPES.map(g => (
+                <TouchableOpacity
+                  key={g.type}
+                  style={[styles.groupRow, groupType === g.type && styles.groupRowActive]}
+                  onPress={() => { setGroupType(g.type); closeSheet(setShowGroupPicker, groupAnim); }}
+                >
+                  <Text style={styles.groupRowEmoji}>{g.emoji}</Text>
+                  <Text style={[styles.groupRowLabel, groupType === g.type && { color: COLORS.purple, fontWeight: '700' }]}>
+                    {g.label}
+                  </Text>
+                  {groupType === g.type && <Text style={{ color: COLORS.purple, fontWeight: '700', fontSize: 16 }}>✓</Text>}
+                </TouchableOpacity>
+              ))}
+              <View style={{ height: Platform.OS === 'ios' ? 24 : 12 }} />
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -366,7 +459,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
   headerSave: { fontSize: 16, fontWeight: '700', color: COLORS.pink, textAlign: 'right' },
 
-  body: { padding: 20, paddingBottom: 48 },
+  /* ScrollView 컨텐츠 - 저장 버튼이 잘리지 않도록 충분한 paddingBottom */
+  body: { padding: 20, paddingBottom: 80 },
 
   preview: {
     alignItems: 'center', borderRadius: 24, padding: 28, marginBottom: 28,
@@ -408,12 +502,7 @@ const styles = StyleSheet.create({
   dropdownBtnText: { fontSize: 15, color: COLORS.text, fontWeight: '500' },
   dropdownChevron: { fontSize: 18, color: COLORS.textMuted },
 
-  emojiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
-  emojiBtn: {
-    width: 54, height: 54, borderRadius: 16, backgroundColor: '#F9FAFB',
-    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#E5E7EB',
-  },
-  palette: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 32 },
+  palette: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
   colorBtn: { width: 44, height: 44, borderRadius: 22 },
   colorBtnSelected: {
     borderWidth: 3, borderColor: '#fff',
@@ -425,25 +514,25 @@ const styles = StyleSheet.create({
   saveBtnInner: { paddingVertical: 16, alignItems: 'center' },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 
-  sheetOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end',
+  /* ── 공통 Modal 오버레이 ── */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
   },
+
+  /* ── 일반 바텀시트 ── */
   sheet: {
     backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 20, paddingBottom: 40,
+    padding: 20,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12, shadowRadius: 16, elevation: 24,
   },
-  sheetHandle: { width: 40, height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  sheetHandle: {
+    width: 40, height: 4, backgroundColor: '#E5E7EB',
+    borderRadius: 2, alignSelf: 'center', marginBottom: 16,
+  },
   sheetTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text, marginBottom: 16 },
-
-  groupRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingVertical: 14, paddingHorizontal: 16, borderRadius: 16, marginBottom: 6, backgroundColor: '#F9FAFB',
-  },
-  groupRowActive: { backgroundColor: COLORS.purplePastel },
-  groupRowEmoji: { fontSize: 22 },
-  groupRowLabel: { flex: 1, fontSize: 16, color: COLORS.text, fontWeight: '500' },
-
   sheetRow: {
     flexDirection: 'row', alignItems: 'center', gap: 16,
     backgroundColor: '#F9FAFB', borderRadius: 20, padding: 16, marginBottom: 12,
@@ -452,4 +541,56 @@ const styles = StyleSheet.create({
   sheetIconText: { fontSize: 26 },
   sheetRowTitle: { fontSize: 15, fontWeight: '600', color: COLORS.text },
   sheetRowSub: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
+  sheetRowChevron: { fontSize: 22, color: COLORS.textMuted },
+
+  /* ── 이모지 선택 시트 (더 큰 시트) ── */
+  emojiSheet: {
+    backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingTop: 12, paddingHorizontal: 16, paddingBottom: 0,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12, shadowRadius: 16, elevation: 24,
+    maxHeight: '75%',
+  },
+  emojiSheetHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 16,
+  },
+  emojiDoneBtn: {
+    borderRadius: 20, paddingHorizontal: 20, paddingVertical: 8,
+  },
+  emojiDoneBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+
+  /* 현재 선택 이모지 */
+  emojiCurrentWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    borderRadius: 16, padding: 12, marginBottom: 16,
+  },
+  emojiCurrentBox: {
+    width: 52, height: 52, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  emojiCurrentIcon: { fontSize: 30 },
+  emojiCurrentLabel: { fontSize: 13, fontWeight: '600' },
+
+  /* 이모지 그리드 */
+  emojiList: { flexGrow: 0 },
+  emojiListContent: { paddingBottom: 8 },
+  emojiGridBtn: {
+    flex: 1, aspectRatio: 1,
+    margin: 4, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1, borderColor: 'transparent',
+  },
+  emojiGridIcon: { fontSize: 28 },
+
+  /* ── 구분 선택 행 ── */
+  groupRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingVertical: 14, paddingHorizontal: 16, borderRadius: 16, marginBottom: 6,
+    backgroundColor: '#F9FAFB',
+  },
+  groupRowActive: { backgroundColor: COLORS.purplePastel },
+  groupRowEmoji: { fontSize: 22 },
+  groupRowLabel: { flex: 1, fontSize: 16, color: COLORS.text, fontWeight: '500' },
 });

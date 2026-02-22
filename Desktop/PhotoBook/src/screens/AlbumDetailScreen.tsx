@@ -5,10 +5,11 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Album, RootStackParamList } from '../types';
-import { getAlbumById, deleteAlbum } from '../store/albumStore';
+import { Album, Child, RootStackParamList } from '../types';
+import { getAlbumById, deleteAlbum, loadChildren } from '../store/albumStore';
 import { COLORS, WEATHER_LABEL } from '../constants';
 import { formatAlbumDate } from '../utils/dateUtils';
+import { TAB_BAR_HEIGHT } from '../../App';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'AlbumDetail'>;
 type Route = RouteProp<RootStackParamList, 'AlbumDetail'>;
@@ -19,18 +20,27 @@ export default function AlbumDetailScreen() {
   const route = useRoute<Route>();
   const { albumId, childId } = route.params;
   const [album, setAlbum] = useState<Album | null>(null);
+  const [child, setChild] = useState<Child | null>(null);
   const [fullscreen, setFullscreen] = useState<{ uri: string; caption: string } | null>(null);
 
   useFocusEffect(useCallback(() => {
     getAlbumById(albumId).then(setAlbum);
-  }, [albumId]));
+    // 그룹 테마 색상 로드
+    loadChildren().then(list => {
+      const found = list.find(c => c.id === childId);
+      if (found) setChild(found);
+    });
+  }, [albumId, childId]));
+
+  // 테마 배경색: 그룹 색상 12% 투명도, 없으면 기본 bgPink
+  const themeBg = child?.color ? child.color + '1F' : COLORS.bgPink;
 
   if (!album) return <View style={styles.loading}><Text>불러오는 중...</Text></View>;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bgPink} />
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themeBg }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={themeBg} />
+      <View style={[styles.header, { backgroundColor: themeBg }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
@@ -48,7 +58,10 @@ export default function AlbumDetailScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.body, { paddingBottom: TAB_BAR_HEIGHT + 24 }]}
+      >
         {/* 메타 카드 */}
         <View style={styles.metaCard}>
           <Text style={styles.albumTitle}>{album.title}</Text>
@@ -95,7 +108,7 @@ export default function AlbumDetailScreen() {
                   <View style={styles.photoIdx}><Text style={styles.photoIdxText}>{idx + 1}</Text></View>
                 </TouchableOpacity>
                 {photo.caption ? (
-                  <View style={styles.captionBox}>
+                  <View style={[styles.captionBox, { backgroundColor: themeBg }]}>
                     <Text style={styles.captionText}>{photo.caption}</Text>
                   </View>
                 ) : null}
@@ -135,7 +148,7 @@ export default function AlbumDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bgPink },
+  container: { flex: 1 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row', alignItems: 'center',
@@ -147,7 +160,7 @@ const styles = StyleSheet.create({
   headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: COLORS.text },
   headerActions: { flexDirection: 'row', gap: 8 },
   headerIcon: { fontSize: 20, padding: 4 },
-  body: { paddingBottom: 48 },
+  body: { paddingTop: 0 },
   metaCard: {
     backgroundColor: COLORS.card, margin: 16, borderRadius: 20, padding: 20,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 2,
@@ -179,7 +192,7 @@ const styles = StyleSheet.create({
     borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center',
   },
   photoIdxText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  captionBox: { padding: 16, borderTopWidth: 1, borderTopColor: COLORS.borderLight, backgroundColor: COLORS.bgPink },
+  captionBox: { padding: 16, borderTopWidth: 1, borderTopColor: COLORS.borderLight },
   captionText: { fontSize: 14, color: COLORS.text, lineHeight: 20, fontStyle: 'italic' },
   noPhotos: { alignItems: 'center', padding: 32 },
   pdfBtn: {
