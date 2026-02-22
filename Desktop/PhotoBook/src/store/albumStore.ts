@@ -66,6 +66,21 @@ export async function upsertAlbum(album: Album): Promise<void> {
   await saveAlbums(all);
 }
 
+// ─── 앨범명 중복 검사 (같은 childId 내에서) ───────────────
+// 수정 시(albumId 있을 때)는 자기 자신 제외하고 검사
+export async function isAlbumTitleDuplicate(
+  title: string,
+  childId: string,
+  excludeAlbumId?: string
+): Promise<boolean> {
+  const all = await loadAlbums();
+  return all.some(a =>
+    a.childId === childId &&
+    a.title.trim() === title.trim() &&
+    a.id !== excludeAlbumId
+  );
+}
+
 export async function deleteAlbum(id: string): Promise<void> {
   const all = await loadAlbums();
   // 앨범 삭제 시 사진 파일도 정리 (용량 최소화)

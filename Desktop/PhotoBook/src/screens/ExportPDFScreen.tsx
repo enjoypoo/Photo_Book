@@ -65,6 +65,7 @@ export default function ExportPDFScreen() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set(preselectedIds));
   const [generating, setGenerating] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number; albumTitle: string } | null>(null);
   const [pageSize, setPageSize] = useState<PageSize>('A5');
   const [layout, setLayout] = useState<LayoutType>('feature');
 
@@ -95,16 +96,20 @@ export default function ExportPDFScreen() {
       return;
     }
     setGenerating(true);
+    setProgress(null);
     try {
       const toExport = albums.filter((a) => selected.has(a.id));
       const sorted = [...toExport].sort(
         (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
       );
-      await generatePDF(sorted, pageSize, layout);
+      await generatePDF(sorted, pageSize, layout, (current, total, albumTitle) => {
+        setProgress({ current, total, albumTitle });
+      });
     } catch (e) {
       Alert.alert('오류', 'PDF 생성 중 문제가 발생했습니다.');
     } finally {
       setGenerating(false);
+      setProgress(null);
     }
   };
 
@@ -263,6 +268,19 @@ export default function ExportPDFScreen() {
             ✅ {selected.size}개 앨범
           </Text>
         </View>
+        {/* 진행상황 표시 */}
+        {generating && progress && (
+          <View style={styles.progressBar}>
+            <View style={[
+              styles.progressFill,
+              { width: `${Math.round((progress.current / progress.total) * 100)}%` as any }
+            ]} />
+            <Text style={styles.progressText}>
+              {progress.current}/{progress.total} 「{progress.albumTitle}」 PDF 생성 중...
+            </Text>
+          </View>
+        )}
+
         <TouchableOpacity
           style={[styles.genBtn, (generating || selected.size === 0) && styles.genBtnDisabled]}
           onPress={handleGenerate}
@@ -271,7 +289,12 @@ export default function ExportPDFScreen() {
           {generating ? (
             <View style={styles.genBtnContent}>
               <ActivityIndicator size="small" color="#fff" />
-              <Text style={styles.genBtnText}>  PDF 생성 중...</Text>
+              <Text style={styles.genBtnText}>
+                {'  '}
+                {progress
+                  ? `${progress.current}/${progress.total} PDF 생성 중...`
+                  : 'PDF 생성 준비 중...'}
+              </Text>
             </View>
           ) : (
             <Text style={styles.genBtnText}>📄 PDF 생성하기</Text>
@@ -435,4 +458,19 @@ const styles = StyleSheet.create({
   genBtnDisabled: { opacity: 0.45 },
   genBtnContent: { flexDirection: 'row', alignItems: 'center' },
   genBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  /* ── 진행상황 바 ── */
+  progressBar: {
+    height: 36, borderRadius: 12,
+    backgroundColor: COLORS.bgPurple,
+    overflow: 'hidden', justifyContent: 'center',
+  },
+  progressFill: {
+    position: 'absolute', top: 0, left: 0, bottom: 0,
+    backgroundColor: COLORS.purple, opacity: 0.25, borderRadius: 12,
+  },
+  progressText: {
+    fontSize: 12, fontWeight: '600', color: COLORS.purple,
+    textAlign: 'center', paddingHorizontal: 8,
+  },
 });

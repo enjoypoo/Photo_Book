@@ -11,7 +11,9 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import uuid from 'react-native-uuid';
 import { Album, PhotoEntry, RootStackParamList, WeatherOption } from '../types';
-import { upsertAlbum, getAlbumById, saveImageLocally } from '../store/albumStore';
+import { upsertAlbum, getAlbumById, saveImageLocally, isAlbumTitleDuplicate } from '../store/albumStore';
+
+const MAX_PHOTOS = 30; // 앨범당 최대 사진 수
 import { COLORS, WEATHER_OPTIONS } from '../constants';
 import { getTodayISO, parseExifDate, toDateOnly, formatDateKorean, formatDateTimeKorean } from '../utils/dateUtils';
 import { TAB_BAR_HEIGHT } from '../../App';
@@ -97,8 +99,17 @@ export default function CreateAlbumScreen() {
 
   /* ── 사진 추가 (EXIF 날짜 자동 적용) ─────────────── */
   const applyPhotosWithExif = (newPhotos: PhotoEntry[], allPhotos: PhotoEntry[]) => {
-    const merged = [...allPhotos, ...newPhotos];
+    // 30장 초과 시 잘라내기
+    const remaining = MAX_PHOTOS - allPhotos.length;
+    const toAdd = newPhotos.slice(0, remaining);
+    const merged = [...allPhotos, ...toAdd];
     setPhotos(merged);
+    if (toAdd.length < newPhotos.length) {
+      Alert.alert(
+        '사진 수 제한',
+        `앨범당 최대 ${MAX_PHOTOS}장까지 저장할 수 있어요.\n${newPhotos.length - toAdd.length}장이 제외되었습니다.`
+      );
+    }
     const hasExif = merged.some(p => p.takenAt);
     if (hasExif) {
       const { date: d, dateEnd: de } = calcDateRange(merged);
@@ -107,15 +118,21 @@ export default function CreateAlbumScreen() {
   };
 
   const pickImages = () => {
+    // 이미 30장이면 차단
+    if (photos.length >= MAX_PHOTOS) {
+      Alert.alert('사진 수 제한', `앨범당 최대 ${MAX_PHOTOS}장까지 저장할 수 있어요.`);
+      return;
+    }
     // Modal 닫기 애니메이션(200ms) 완료 후 ImagePicker 실행
     // (Modal이 완전히 닫히기 전에 다른 네이티브 뷰를 열면 iOS에서 크래시 발생)
     hidePhotoSheet();
     setTimeout(async () => {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') { Alert.alert('권한 필요', '사진 앨범 접근 권한이 필요합니다.'); return; }
+      const canAdd = MAX_PHOTOS - photos.length;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'], allowsMultipleSelection: true,
-        quality: 0.75, selectionLimit: 20, exif: true,
+        quality: 0.75, selectionLimit: canAdd, exif: true,
       });
       if (!result.canceled) {
         const newPhotos: PhotoEntry[] = result.assets.map(a => ({
@@ -129,6 +146,11 @@ export default function CreateAlbumScreen() {
   };
 
   const takePhoto = () => {
+    // 이미 30장이면 차단
+    if (photos.length >= MAX_PHOTOS) {
+      Alert.alert('사진 수 제한', `앨범당 최대 ${MAX_PHOTOS}장까지 저장할 수 있어요.`);
+      return;
+    }
     // Modal 닫기 애니메이션(200ms) 완료 후 ImagePicker 실행
     hidePhotoSheet();
     setTimeout(async () => {
@@ -190,6 +212,12 @@ export default function CreateAlbumScreen() {
     }
     if (dateEnd && !dateRegex.test(dateEnd)) {
       Alert.alert('알림', '종료 날짜를 YYYY-MM-DD 형식으로 입력해주세요.\n예: 2024-03-20');
+      return;
+    }
+    // 중복 앨범명 검사 (같은 아이 내에서)
+    const isDuplicate = await isAlbumTitleDuplicate(title.trim(), childId, albumId);
+    if (isDuplicate) {
+      Alert.alert('앨범 이름 중복', `"${title.trim()}" 앨범이 이미 있어요.\n다른 이름을 사용해주세요.`);
       return;
     }
     Keyboard.dismiss();
@@ -344,10 +372,19 @@ export default function CreateAlbumScreen() {
 
           {/* ── 사진 추가 (피그마 PhotoUploader 스타일) ── */}
           <Text style={[styles.label, { marginTop: 20 }]}>사진</Text>
-          <TouchableOpacity style={styles.photoUploaderBox} onPress={showPhotoSheet}>
-            <Text style={styles.photoUploaderIcon}>🖼️</Text>
-            <Text style={styles.photoUploaderTitle}>사진 추가하기</Text>
-            <Text style={styles.photoUploaderSub}>여러 장 선택 가능</Text>
+          <TouchableOpacity
+            style={[styles.photoUploaderBox, photos.length >= MAX_PHOTOS && styles.photoUploaderBoxFull]}
+            onPress={showPhotoSheet}
+          >
+            <Text style={styles.photoUploaderIcon}>{photos.length >= MAX_PHOTOS ? '🚫' : '🖼️'}</Text>
+            <Text style={styles.photoUploaderTitle}>
+              {photos.length >= MAX_PHOTOS ? '사진이 가득 찼어요' : '사진 추가하기'}
+            </Text>
+            <Text style={styles.photoUploaderSub}>
+              {photos.length >= MAX_PHOTOS
+                ? `최대 ${MAX_PHOTOS}장 저장 완료`
+                : `${photos.length}/${MAX_PHOTOS}장 · 여러 장 선택 가능`}
+            </Text>
           </TouchableOpacity>
 
           {/* ── 등록된 사진 목록 ── */}
@@ -539,6 +576,10 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderStyle: 'dashed', borderColor: COLORS.purple,
     borderRadius: 20, backgroundColor: COLORS.purplePastel + '55',
     alignItems: 'center', justifyContent: 'center',
+  },
+  photoUploaderBoxFull: {
+    borderColor: COLORS.textMuted,
+    backgroundColor: '#F9FAFB',
   },
   photoUploaderIcon: { fontSize: 44, marginBottom: 8 },
   photoUploaderTitle: { fontSize: 16, color: COLORS.purple, fontWeight: '600' },
