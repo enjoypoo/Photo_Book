@@ -1,18 +1,58 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
-  Image, Alert, ActivityIndicator, SafeAreaView, StatusBar,
+  Image, Alert, ActivityIndicator, SafeAreaView, StatusBar, ScrollView,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Album, RootStackParamList } from '../types';
 import { loadAlbums } from '../store/albumStore';
-import { generatePDF } from '../utils/pdfGenerator';
+import { generatePDF, PageSize, LayoutType } from '../utils/pdfGenerator';
 import { COLORS, WEATHER_LABEL } from '../constants';
 import { formatDateKorean } from '../utils/dateUtils';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'ExportPDF'>;
 type Route = RouteProp<RootStackParamList, 'ExportPDF'>;
+
+/* ── 용지 크기 옵션 ──────────────────────────────────── */
+const PAGE_SIZES: { key: PageSize; label: string; desc: string }[] = [
+  { key: 'A4', label: 'A4', desc: '210 × 297mm\n일반 인쇄 표준' },
+  { key: 'A5', label: 'A5', desc: '148 × 210mm\n소책자 / 포토북' },
+];
+
+/* ── 레이아웃 옵션 ───────────────────────────────────── */
+const LAYOUTS: { key: LayoutType; label: string; preview: string; desc: string }[] = [
+  {
+    key: 'single',
+    label: '1열 세로',
+    desc: '사진 1장씩\n순서대로 배치',
+    preview: '┌────────┐\n│  사진  │\n├────────┤\n│  사진  │\n└────────┘',
+  },
+  {
+    key: 'two_col',
+    label: '2열 격자',
+    desc: '2장씩 나란히\n깔끔한 격자형',
+    preview: '┌────┬────┐\n│사진│사진│\n├────┼────┤\n│사진│사진│\n└────┴────┘',
+  },
+  {
+    key: 'feature',
+    label: '피처 + 2열',
+    desc: '첫 사진 크게\n나머지 2열 배치',
+    preview: '┌──────────┐\n│  큰사진  │\n├────┬─────┤\n│사진│ 사진│\n└────┴─────┘',
+  },
+  {
+    key: 'magazine',
+    label: '잡지형',
+    desc: '와이드 + 하단 2장\n고급스러운 레이아웃',
+    preview: '┌──────────┐\n│ 와이드사진│\n├────┬─────┤\n│사진│ 사진│\n└────┴─────┘',
+  },
+  {
+    key: 'three_col',
+    label: '3열 격자',
+    desc: '3장씩 배치\n많은 사진에 적합',
+    preview: '┌───┬───┬───┐\n│사진│사진│사진│\n├───┼───┼───┤\n│사진│사진│사진│\n└───┴───┴───┘',
+  },
+];
 
 export default function ExportPDFScreen() {
   const navigation = useNavigation<Nav>();
@@ -22,6 +62,8 @@ export default function ExportPDFScreen() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set(preselectedIds));
   const [generating, setGenerating] = useState(false);
+  const [pageSize, setPageSize] = useState<PageSize>('A5');
+  const [layout, setLayout] = useState<LayoutType>('feature');
 
   useEffect(() => {
     loadAlbums().then((data) => {
@@ -55,7 +97,7 @@ export default function ExportPDFScreen() {
       const sorted = [...toExport].sort(
         (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
       );
-      await generatePDF(sorted);
+      await generatePDF(sorted, pageSize, layout);
     } catch (e) {
       Alert.alert('오류', 'PDF 생성 중 문제가 발생했습니다.');
     } finally {
@@ -82,19 +124,77 @@ export default function ExportPDFScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 안내 */}
-      <View style={styles.infoBox}>
-        <Text style={styles.infoText}>
-          📖 선택한 앨범들이 날짜순으로 정렬되어 소책자 형태의 PDF로 생성됩니다.
-        </Text>
-      </View>
-
-      {/* 앨범 목록 */}
       <FlatList
         data={albums}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <>
+            {/* ── 용지 크기 선택 ── */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>📐 용지 크기</Text>
+              <View style={styles.pageSizeRow}>
+                {PAGE_SIZES.map((ps) => (
+                  <TouchableOpacity
+                    key={ps.key}
+                    style={[styles.pageSizeCard, pageSize === ps.key && styles.pageSizeCardActive]}
+                    onPress={() => setPageSize(ps.key)}
+                    activeOpacity={0.8}
+                  >
+                    {/* 용지 모형 */}
+                    <View style={[
+                      styles.paperIcon,
+                      ps.key === 'A5' && styles.paperIconA5,
+                      pageSize === ps.key && styles.paperIconActive,
+                    ]}>
+                      <Text style={[styles.paperIconLabel, pageSize === ps.key && styles.paperIconLabelActive]}>
+                        {ps.label}
+                      </Text>
+                    </View>
+                    <Text style={[styles.pageSizeLabel, pageSize === ps.key && styles.pageSizeLabelActive]}>
+                      {ps.label}
+                    </Text>
+                    <Text style={[styles.pageSizeDesc, pageSize === ps.key && styles.pageSizeDescActive]}>
+                      {ps.desc}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* ── 레이아웃 선택 ── */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>🖼️ 사진 배치 레이아웃</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.layoutScroll}>
+                {LAYOUTS.map((lt) => (
+                  <TouchableOpacity
+                    key={lt.key}
+                    style={[styles.layoutCard, layout === lt.key && styles.layoutCardActive]}
+                    onPress={() => setLayout(lt.key)}
+                    activeOpacity={0.8}
+                  >
+                    {/* 미리보기 ASCII */}
+                    <View style={[styles.layoutPreview, layout === lt.key && styles.layoutPreviewActive]}>
+                      <Text style={[styles.layoutPreviewText, layout === lt.key && styles.layoutPreviewTextActive]}>
+                        {lt.preview}
+                      </Text>
+                    </View>
+                    <Text style={[styles.layoutLabel, layout === lt.key && styles.layoutLabelActive]}>
+                      {lt.label}
+                    </Text>
+                    <Text style={[styles.layoutDesc, layout === lt.key && styles.layoutDescActive]}>
+                      {lt.desc}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* 앨범 선택 헤더 */}
+            <Text style={styles.sectionTitle}>📚 앨범 선택</Text>
+          </>
+        }
         renderItem={({ item }) => {
           const isSelected = selected.has(item.id);
           const cover = item.photos[0];
@@ -146,11 +246,20 @@ export default function ExportPDFScreen() {
 
       {/* 하단 푸터 */}
       <View style={styles.footer}>
-        <Text style={styles.footerInfo}>
-          {selected.size > 0
-            ? `✅ ${selected.size}개 앨범 선택됨`
-            : '앨범을 선택해주세요'}
-        </Text>
+        {/* 선택 요약 */}
+        <View style={styles.footerSummary}>
+          <Text style={styles.footerSummaryItem}>
+            📐 {pageSize === 'A4' ? 'A4 (210×297mm)' : 'A5 (148×210mm)'}
+          </Text>
+          <Text style={styles.footerSummaryDot}>·</Text>
+          <Text style={styles.footerSummaryItem}>
+            🖼️ {LAYOUTS.find(l => l.key === layout)?.label}
+          </Text>
+          <Text style={styles.footerSummaryDot}>·</Text>
+          <Text style={[styles.footerSummaryItem, selected.size > 0 && { color: COLORS.purple }]}>
+            ✅ {selected.size}개 앨범
+          </Text>
+        </View>
         <TouchableOpacity
           style={[styles.genBtn, (generating || selected.size === 0) && styles.genBtnDisabled]}
           onPress={handleGenerate}
@@ -182,22 +291,105 @@ const styles = StyleSheet.create({
   backText: { fontSize: 24, color: COLORS.text },
   headerTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
   selectAllText: { fontSize: 14, color: COLORS.purple, fontWeight: '600' },
-  infoBox: {
-    backgroundColor: COLORS.purplePastel, margin: 16, borderRadius: 14,
-    padding: 14, borderLeftWidth: 3, borderLeftColor: COLORS.purple,
+
+  list: { paddingBottom: 16 },
+
+  /* ── 섹션 ── */
+  section: { marginBottom: 4 },
+  sectionTitle: {
+    fontSize: 14, fontWeight: '700', color: COLORS.text,
+    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 10,
   },
-  infoText: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 20 },
-  list: { paddingHorizontal: 16, paddingBottom: 16 },
+
+  /* ── 용지 크기 ── */
+  pageSizeRow: {
+    flexDirection: 'row', gap: 12,
+    paddingHorizontal: 16,
+  },
+  pageSizeCard: {
+    flex: 1, alignItems: 'center', padding: 14,
+    backgroundColor: COLORS.card, borderRadius: 16,
+    borderWidth: 2, borderColor: COLORS.border,
+  },
+  pageSizeCardActive: {
+    borderColor: COLORS.purple, backgroundColor: COLORS.purplePastel,
+  },
+  paperIcon: {
+    width: 44, height: 62,
+    backgroundColor: '#F3F4F6', borderRadius: 4,
+    borderWidth: 1.5, borderColor: '#D1D5DB',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 8,
+    shadowColor: '#000', shadowOffset: { width: 1, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 3, elevation: 2,
+  },
+  paperIconA5: {
+    width: 44, height: 50,
+  },
+  paperIconActive: {
+    backgroundColor: COLORS.purplePastel,
+    borderColor: COLORS.purple,
+  },
+  paperIconLabel: {
+    fontSize: 11, fontWeight: '800', color: '#9CA3AF',
+  },
+  paperIconLabelActive: {
+    color: COLORS.purple,
+  },
+  pageSizeLabel: {
+    fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: 4,
+  },
+  pageSizeLabelActive: { color: COLORS.purple },
+  pageSizeDesc: {
+    fontSize: 11, color: COLORS.textMuted, textAlign: 'center', lineHeight: 16,
+  },
+  pageSizeDescActive: { color: COLORS.purple },
+
+  /* ── 레이아웃 ── */
+  layoutScroll: { paddingLeft: 16 },
+  layoutCard: {
+    width: 130, marginRight: 10, padding: 12,
+    backgroundColor: COLORS.card, borderRadius: 16,
+    borderWidth: 2, borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  layoutCardActive: {
+    borderColor: COLORS.pink, backgroundColor: COLORS.pinkPastel,
+  },
+  layoutPreview: {
+    backgroundColor: '#F3F4F6', borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 6, marginBottom: 8,
+    width: '100%', alignItems: 'center',
+  },
+  layoutPreviewActive: {
+    backgroundColor: COLORS.pinkPastel,
+  },
+  layoutPreviewText: {
+    fontFamily: 'Courier', fontSize: 7.5, color: '#6B7280', lineHeight: 11,
+    textAlign: 'center',
+  },
+  layoutPreviewTextActive: { color: COLORS.pink },
+  layoutLabel: {
+    fontSize: 13, fontWeight: '700', color: COLORS.text, marginBottom: 3,
+    textAlign: 'center',
+  },
+  layoutLabelActive: { color: COLORS.pink },
+  layoutDesc: {
+    fontSize: 10.5, color: COLORS.textMuted, textAlign: 'center', lineHeight: 15,
+  },
+  layoutDescActive: { color: COLORS.pink },
+
+  /* ── 앨범 목록 ── */
   albumRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.card, borderRadius: 16, padding: 12,
-    marginBottom: 10, borderWidth: 2, borderColor: 'transparent',
+    marginBottom: 10, marginHorizontal: 16,
+    borderWidth: 2, borderColor: 'transparent',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07, shadowRadius: 6, elevation: 2,
   },
   albumRowSelected: {
-    borderColor: COLORS.pink,
-    backgroundColor: COLORS.pinkPastel,
+    borderColor: COLORS.pink, backgroundColor: COLORS.pinkPastel,
   },
   checkCircle: {
     width: 28, height: 28, borderRadius: 14,
@@ -205,10 +397,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginRight: 12,
     backgroundColor: COLORS.inputBg,
   },
-  checkCircleSelected: {
-    borderColor: COLORS.pink,
-    backgroundColor: COLORS.pink,
-  },
+  checkCircleSelected: { borderColor: COLORS.pink, backgroundColor: COLORS.pink },
   checkMark: { color: '#fff', fontSize: 14, fontWeight: '800' },
   thumb: { width: 64, height: 64, borderRadius: 12, marginRight: 12 },
   thumbPlaceholder: {
@@ -221,12 +410,19 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', paddingTop: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { fontSize: 15, color: COLORS.textMuted },
+
+  /* ── 푸터 ── */
   footer: {
     padding: 16, paddingBottom: 24,
     borderTopWidth: 1, borderTopColor: COLORS.border,
     backgroundColor: COLORS.card, gap: 10,
   },
-  footerInfo: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center' },
+  footerSummary: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, flexWrap: 'wrap',
+  },
+  footerSummaryItem: { fontSize: 12, color: COLORS.textSecondary, fontWeight: '500' },
+  footerSummaryDot: { fontSize: 12, color: COLORS.textMuted },
   genBtn: {
     backgroundColor: COLORS.purple, borderRadius: 24,
     paddingVertical: 16, alignItems: 'center',
