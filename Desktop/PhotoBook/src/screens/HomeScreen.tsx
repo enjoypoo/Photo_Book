@@ -156,7 +156,7 @@ export default function HomeScreen() {
                 onPress={() => setPdfMode(true)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.pdfIconText}>📄</Text>
+                <Text style={styles.pdfIconText}>PDF</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -352,13 +352,13 @@ const styles = StyleSheet.create({
   headerSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 
-  /* PDF 아이콘 버튼 */
+  /* PDF 텍스트 버튼 */
   pdfIconBtn: {
-    width: 40, height: 40, borderRadius: 20,
+    height: 36, paddingHorizontal: 14, borderRadius: 18,
     backgroundColor: '#F3F4F6',
     alignItems: 'center', justifyContent: 'center',
   },
-  pdfIconText: { fontSize: 20 },
+  pdfIconText: { fontSize: 13, fontWeight: '700', color: COLORS.text, letterSpacing: 0.5 },
 
   /* + 버튼 */
   addBtnWrap: {},
