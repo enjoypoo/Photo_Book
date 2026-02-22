@@ -328,41 +328,70 @@ async function buildAlbumHtml(
       </p>
     </div>`;
 
-  /* ── 고정 헤더 (매 인쇄 페이지 상단에 반복) ── */
-  // expo-print(WebKit)에서 position:fixed는 매 페이지 상단에 반복 출력됨
-  const headerH = isA5 ? 58 : 70; // 고정 헤더 높이(px) - 본문 패딩톱 계산에 사용
+  /* ── 고정 헤더 (매 인쇄 페이지 상단에 반복) ──────────
+     항목: 앨범명 / 날짜 / 위치 / 날씨 / 사진 장수 + 가로줄
+     expo-print(WebKit): position:fixed → 매 페이지 상단 반복
+  ──────────────────────────────────────────────────── */
+  // 헤더 높이: 앨범명 행 + 메타정보 행 + 여백
+  const headerH = isA5 ? 72 : 86;
   const fixedHeader = `
     <div style="
       position:fixed;top:0;left:0;right:0;
       height:${headerH}px;
       background:#fff;
-      padding:${padding}px ${padding}px 8px ${padding}px;
-      border-bottom:2px solid #f472b6;
+      padding:${padding}px ${padding}px 0 ${padding}px;
       box-sizing:border-box;
       z-index:999;">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <span style="font-size:${titleSize}px;font-weight:700;color:#1f2937;line-height:1;">
+
+      <!-- 앨범명 행 -->
+      <div style="
+        display:flex;align-items:baseline;justify-content:space-between;
+        margin-bottom:5px;">
+        <span style="font-size:${titleSize}px;font-weight:800;color:#1f2937;line-height:1.2;">
           ${album.title || '우리 아이의 하루'}
         </span>
-        <span style="display:inline-flex;align-items:center;
+        <span style="font-size:${metaSize}px;color:#a855f7;font-weight:600;white-space:nowrap;margin-left:8px;">
+          🖼️ ${album.photos.length}장
+        </span>
+      </div>
+
+      <!-- 메타 정보 행: 날짜 · 위치 · 날씨 -->
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+        <span style="display:inline-flex;align-items:center;gap:2px;
           background:#fdf2f8;border-radius:20px;padding:2px 8px;
           font-size:${metaSize}px;color:#6b7280;">
           📅 ${formatDateKorean(album.date)}
         </span>
         ${album.location
-          ? `<span style="display:inline-flex;align-items:center;
+          ? `<span style="display:inline-flex;align-items:center;gap:2px;
               background:#faf5ff;border-radius:20px;padding:2px 8px;
               font-size:${metaSize}px;color:#6b7280;">📍 ${album.location}</span>`
           : ''}
         ${weatherStr
-          ? `<span style="display:inline-flex;align-items:center;
+          ? `<span style="display:inline-flex;align-items:center;gap:2px;
               background:#eff6ff;border-radius:20px;padding:2px 8px;
               font-size:${metaSize}px;color:#6b7280;">${weatherStr}</span>`
           : ''}
       </div>
+
+      <!-- 구분선 -->
+      <div style="height:2px;background:linear-gradient(90deg,#f472b6,#c084fc,#818cf8);border-radius:2px;"></div>
     </div>`;
 
-  /* ── 본문 ── */
+  /* ── 본문 ──────────────────────────────────────────────
+     · 1페이지: 헤더 아래 → 이야기(story) → 사진
+     · 2페이지~: 헤더만 반복, 사진 이어서 표시
+  ──────────────────────────────────────────────────── */
+  const storyBlock = album.story
+    ? `<div style="margin-bottom:12px;padding:8px 12px;
+        background:linear-gradient(135deg,#fdf2f8,#faf5ff);
+        border-radius:8px;border-left:3px solid #c084fc;">
+        <p style="margin:0;font-size:${storySize}px;color:#1f2937;line-height:1.7;">
+          ${album.story}
+        </p>
+      </div>`
+    : '';
+
   const contentPage = `
     <div style="
       padding-top:${headerH + 12}px;
@@ -372,16 +401,7 @@ async function buildAlbumHtml(
       font-family:-apple-system,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;
       background:#fff;">
 
-      ${album.story
-        ? `<div style="margin-bottom:10px;padding:7px 11px;
-            background:linear-gradient(135deg,#fdf2f8,#faf5ff);
-            border-radius:8px;border-left:3px solid #c084fc;">
-            <p style="margin:0;font-size:${storySize}px;color:#1f2937;line-height:1.6;">
-              ${album.story}
-            </p>
-          </div>`
-        : ''}
-
+      ${storyBlock}
       <div>${photoHtml}</div>
     </div>`;
 
