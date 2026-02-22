@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
-  Image, Alert, ActivityIndicator, SafeAreaView, StatusBar, ScrollView,
+  Image, Alert, ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Album, RootStackParamList } from '../types';
@@ -58,6 +59,7 @@ export default function ExportPDFScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const preselectedIds = route.params?.albumIds ?? [];
+  const insets = useSafeAreaInsets();
 
   const [albums, setAlbums] = useState<Album[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set(preselectedIds));
@@ -245,7 +247,7 @@ export default function ExportPDFScreen() {
       />
 
       {/* 하단 푸터 */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         {/* 선택 요약 */}
         <View style={styles.footerSummary}>
           <Text style={styles.footerSummaryItem}>
@@ -413,7 +415,7 @@ const styles = StyleSheet.create({
 
   /* ── 푸터 ── */
   footer: {
-    padding: 16, paddingBottom: 24,
+    padding: 16,
     borderTopWidth: 1, borderTopColor: COLORS.border,
     backgroundColor: COLORS.card, gap: 10,
   },
