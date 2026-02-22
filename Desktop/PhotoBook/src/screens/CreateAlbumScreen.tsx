@@ -106,37 +106,44 @@ export default function CreateAlbumScreen() {
     }
   };
 
-  const pickImages = async () => {
+  const pickImages = () => {
+    // Modal 닫기 애니메이션(200ms) 완료 후 ImagePicker 실행
+    // (Modal이 완전히 닫히기 전에 다른 네이티브 뷰를 열면 iOS에서 크래시 발생)
     hidePhotoSheet();
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('권한 필요', '사진 앨범 접근 권한이 필요합니다.'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], allowsMultipleSelection: true,
-      quality: 0.75, selectionLimit: 20, exif: true,
-    });
-    if (!result.canceled) {
-      const newPhotos: PhotoEntry[] = result.assets.map(a => ({
-        id: uuid.v4() as string, uri: a.uri, caption: '',
-        width: a.width, height: a.height,
-        takenAt: getExifDate(a) ?? undefined,
-      }));
-      applyPhotosWithExif(newPhotos, photos);
-    }
+    setTimeout(async () => {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') { Alert.alert('권한 필요', '사진 앨범 접근 권한이 필요합니다.'); return; }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'], allowsMultipleSelection: true,
+        quality: 0.75, selectionLimit: 20, exif: true,
+      });
+      if (!result.canceled) {
+        const newPhotos: PhotoEntry[] = result.assets.map(a => ({
+          id: uuid.v4() as string, uri: a.uri, caption: '',
+          width: a.width, height: a.height,
+          takenAt: getExifDate(a) ?? undefined,
+        }));
+        applyPhotosWithExif(newPhotos, photos);
+      }
+    }, 300); // Modal 완전히 닫힌 후 실행
   };
 
-  const takePhoto = async () => {
+  const takePhoto = () => {
+    // Modal 닫기 애니메이션(200ms) 완료 후 ImagePicker 실행
     hidePhotoSheet();
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('권한 필요', '카메라 접근 권한이 필요합니다.'); return; }
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.75, exif: true });
-    if (!result.canceled) {
-      const a = result.assets[0];
-      const newPhotos: PhotoEntry[] = [{
-        id: uuid.v4() as string, uri: a.uri, caption: '',
-        takenAt: getExifDate(a) ?? new Date().toISOString(),
-      }];
-      applyPhotosWithExif(newPhotos, photos);
-    }
+    setTimeout(async () => {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') { Alert.alert('권한 필요', '카메라 접근 권한이 필요합니다.'); return; }
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.75, exif: true });
+      if (!result.canceled) {
+        const a = result.assets[0];
+        const newPhotos: PhotoEntry[] = [{
+          id: uuid.v4() as string, uri: a.uri, caption: '',
+          takenAt: getExifDate(a) ?? new Date().toISOString(),
+        }];
+        applyPhotosWithExif(newPhotos, photos);
+      }
+    }, 300); // Modal 완전히 닫힌 후 실행
   };
 
   /* ── 위치 자동 감지 (도>시>동 순서) ──────────────── */
