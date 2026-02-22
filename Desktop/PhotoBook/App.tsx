@@ -1,4 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react';
+import * as Notifications from 'expo-notifications';
 import { NavigationContainer, NavigatorScreenParams } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -12,6 +13,17 @@ import { COLORS } from './src/constants';
 import { RootStackParamList } from './src/types';
 import { Child } from './src/types';
 import { loadChildren } from './src/store/albumStore';
+
+// 앱 포그라운드에서도 알림 표시
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 import HomeScreen from './src/screens/HomeScreen';
 import SettingsScreen from './src/screens/SettingsScreen';

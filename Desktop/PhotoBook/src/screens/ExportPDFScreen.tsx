@@ -9,7 +9,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Album, RootStackParamList } from '../types';
 import { loadAlbums } from '../store/albumStore';
-import { generatePDF, PageSize, LayoutType } from '../utils/pdfGenerator';
+import { generatePDF, requestNotificationPermission, PageSize, LayoutType } from '../utils/pdfGenerator';
 import { COLORS, WEATHER_LABEL } from '../constants';
 import { formatDateKorean } from '../utils/dateUtils';
 
@@ -80,6 +80,8 @@ export default function ExportPDFScreen() {
       );
       setAlbums(sorted);
     });
+    // 알림 권한 미리 요청
+    requestNotificationPermission();
   }, []);
 
   const toggleSelect = (id: string) => {
@@ -111,9 +113,24 @@ export default function ExportPDFScreen() {
       const sorted = [...toExport].sort(
         (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
       );
-      await generatePDF(sorted, pageSize, layout, (current, total, albumTitle) => {
-        setProgress({ current, total, albumTitle });
-      });
+      await generatePDF(
+        sorted,
+        pageSize,
+        layout,
+        (current, total, albumTitle) => {
+          setProgress({ current, total, albumTitle });
+        },
+        (count) => {
+          // 모든 PDF 완료 팝업
+          Alert.alert(
+            '✅ PDF 생성 완료!',
+            count === 1
+              ? 'PDF 1개가 생성되었어요!'
+              : `PDF ${count}개가 모두 생성되었어요!`,
+            [{ text: '확인', style: 'default' }]
+          );
+        }
+      );
     } catch (e) {
       Alert.alert('오류', 'PDF 생성 중 문제가 발생했습니다.');
     } finally {
