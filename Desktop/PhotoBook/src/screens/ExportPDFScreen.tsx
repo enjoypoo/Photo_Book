@@ -4,6 +4,7 @@ import {
   Image, Alert, ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { TAB_BAR_HEIGHT } from '../../App';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Album, RootStackParamList } from '../types';
@@ -247,7 +248,7 @@ export default function ExportPDFScreen() {
       />
 
       {/* 하단 푸터 */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.footer, { paddingBottom: TAB_BAR_HEIGHT + 16 }]}>
         {/* 선택 요약 */}
         <View style={styles.footerSummary}>
           <Text style={styles.footerSummaryItem}>
