@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView, Image,
   StyleSheet, Alert, Modal, KeyboardAvoidingView, Platform,
   ActivityIndicator, SafeAreaView, StatusBar, Animated,
-  Keyboard,
+  Keyboard, TouchableWithoutFeedback,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -401,39 +401,48 @@ export default function CreateAlbumScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* ── 사진 추가 BottomSheet ── */}
-      {photoSheetVisible && (
+      {/* ── 사진 추가 Modal BottomSheet ── */}
+      <Modal
+        visible={photoSheetVisible}
+        transparent
+        animationType="none"
+        onRequestClose={hidePhotoSheet}
+        statusBarTranslucent
+      >
         <TouchableOpacity
           style={styles.sheetOverlay}
           activeOpacity={1}
           onPress={hidePhotoSheet}
         >
           <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
-            <TouchableOpacity activeOpacity={1}>
-              <View style={styles.sheetHandle} />
-              <Text style={styles.sheetTitle}>사진 추가</Text>
-              <TouchableOpacity style={styles.sheetRow} onPress={takePhoto}>
-                <View style={[styles.sheetIconBox, { backgroundColor: '#EFF6FF' }]}>
-                  <Text style={styles.sheetIconText}>📷</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.sheetRowTitle}>카메라로 촬영</Text>
-                  <Text style={styles.sheetRowSub}>새로운 사진 찍기</Text>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sheetRow} onPress={pickImages}>
-                <View style={[styles.sheetIconBox, { backgroundColor: COLORS.purplePastel }]}>
-                  <Text style={styles.sheetIconText}>🖼️</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.sheetRowTitle}>갤러리에서 선택</Text>
-                  <Text style={styles.sheetRowSub}>여러 장 선택 가능</Text>
-                </View>
-              </TouchableOpacity>
-            </TouchableOpacity>
+            <TouchableWithoutFeedback>
+              <View>
+                <View style={styles.sheetHandle} />
+                <Text style={styles.sheetTitle}>사진 추가</Text>
+                <TouchableOpacity style={styles.sheetRow} onPress={takePhoto}>
+                  <View style={[styles.sheetIconBox, { backgroundColor: '#EFF6FF' }]}>
+                    <Text style={styles.sheetIconText}>📷</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sheetRowTitle}>카메라로 촬영</Text>
+                    <Text style={styles.sheetRowSub}>새로운 사진 찍기</Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.sheetRow} onPress={pickImages}>
+                  <View style={[styles.sheetIconBox, { backgroundColor: COLORS.purplePastel }]}>
+                    <Text style={styles.sheetIconText}>🖼️</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sheetRowTitle}>갤러리에서 선택</Text>
+                    <Text style={styles.sheetRowSub}>여러 장 선택 가능</Text>
+                  </View>
+                </TouchableOpacity>
+                <View style={{ height: TAB_BAR_HEIGHT }} />
+              </View>
+            </TouchableWithoutFeedback>
           </Animated.View>
         </TouchableOpacity>
-      )}
+      </Modal>
 
       {/* ── 캡션 모달 ── */}
       <Modal visible={captionModal.visible} transparent animationType="slide"
@@ -484,7 +493,7 @@ const styles = StyleSheet.create({
   headerDoneBtn: { backgroundColor: COLORS.purple, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 7 },
   headerDoneBtnDisabled: { opacity: 0.4 },
   headerDoneText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  body: { padding: 20, paddingBottom: 40, backgroundColor: '#fff' },
+  body: { padding: 20, paddingBottom: 60, backgroundColor: '#fff' },
   label: { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 8 },
   input: {
     backgroundColor: '#fff', borderRadius: 12, borderWidth: 2, borderColor: '#E5E7EB',
@@ -571,16 +580,18 @@ const styles = StyleSheet.create({
   },
   saveBigBtnDisabled: { opacity: 0.45 },
   saveBigBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  /* BottomSheet */
+  /* Modal BottomSheet */
   sheetOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end',
-    zIndex: 100,
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
   },
   sheet: {
     backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 20, paddingBottom: TAB_BAR_HEIGHT + 20,
-    zIndex: 101,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12, shadowRadius: 16, elevation: 24,
   },
   sheetHandle: { width: 40, height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   sheetTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text, marginBottom: 20 },
