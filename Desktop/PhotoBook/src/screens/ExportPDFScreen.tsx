@@ -121,22 +121,28 @@ export default function ExportPDFScreen() {
           setProgress({ current, total, albumTitle });
         },
         (count) => {
-          // 모든 PDF 완료 팝업
+          // 모든 PDF 완료 → 팝업 + 확인 누르면 이전 화면으로
+          setGenerating(false);
+          setProgress(null);
           Alert.alert(
             '✅ PDF 생성 완료!',
             count === 1
               ? 'PDF 1개가 생성되었어요!'
               : `PDF ${count}개가 모두 생성되었어요!`,
-            [{ text: '확인', style: 'default' }]
+            [{
+              text: '확인',
+              style: 'default',
+              onPress: () => navigation.goBack(),
+            }]
           );
         }
       );
     } catch (e) {
       Alert.alert('오류', 'PDF 생성 중 문제가 발생했습니다.');
-    } finally {
       setGenerating(false);
       setProgress(null);
     }
+    // onComplete에서 이미 setGenerating(false) 처리하므로 finally 불필요
   };
 
   return (
@@ -323,26 +329,40 @@ export default function ExportPDFScreen() {
           </Text>
         </View>
         {/* 진행상황 표시 */}
-        {generating && progress && (
+        {generating && (
           <View>
             <View style={styles.progressBar}>
               <View style={[
                 styles.progressFill,
-                { width: `${Math.round((progress.current / progress.total) * 100)}%` as any }
+                {
+                  width: `${progress
+                    ? Math.round((progress.current / progress.total) * 100)
+                    : 0}%` as any
+                }
               ]} />
               <Text style={styles.progressText}>
-                {progress.current}/{progress.total} 「{progress.albumTitle}」 PDF 생성 중...
+                {!progress
+                  ? 'PDF 생성 준비 중...'
+                  : progress.current === 0
+                    ? `「${progress.albumTitle}」 생성 중...`
+                    : progress.current === progress.total
+                      ? `✅ 모든 PDF 생성 완료!`
+                      : `${progress.current}/${progress.total} 완료 · 「${progress.albumTitle}」 생성 중...`}
               </Text>
             </View>
             <View style={styles.progressPercentRow}>
               <View style={styles.progressTrack}>
                 <View style={[
                   styles.progressThumb,
-                  { width: `${Math.round((progress.current / progress.total) * 100)}%` as any }
+                  {
+                    width: `${progress
+                      ? Math.round((progress.current / progress.total) * 100)
+                      : 0}%` as any
+                  }
                 ]} />
               </View>
               <Text style={styles.progressPercent}>
-                {Math.round((progress.current / progress.total) * 100)}%
+                {progress ? Math.round((progress.current / progress.total) * 100) : 0}%
               </Text>
             </View>
           </View>
@@ -358,9 +378,11 @@ export default function ExportPDFScreen() {
               <ActivityIndicator size="small" color="#fff" />
               <Text style={styles.genBtnText}>
                 {'  '}
-                {progress
-                  ? `${progress.current}/${progress.total} PDF 생성 중...`
-                  : 'PDF 생성 준비 중...'}
+                {!progress
+                  ? 'PDF 생성 준비 중...'
+                  : progress.current === 0
+                    ? `「${progress.albumTitle}」 생성 중...`
+                    : `${progress.current}/${progress.total} PDF 생성 중...`}
               </Text>
             </View>
           ) : (

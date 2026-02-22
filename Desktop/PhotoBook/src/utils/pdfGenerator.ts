@@ -428,7 +428,8 @@ export async function generatePDF(
 
   for (let i = 0; i < albums.length; i++) {
     const album = albums[i];
-    onProgress?.(i + 1, albums.length, album.title || '앨범');
+    // 생성 시작 알림: 현재 처리 중인 앨범 표시 (완료 전 = i/total)
+    onProgress?.(i, albums.length, album.title || '앨범');
 
     const html = await buildAlbumHtml(album, layout, pageSize);
     const { uri: rawUri } = await Print.printToFileAsync({ html, width, height, base64: false });
@@ -448,6 +449,9 @@ export async function generatePDF(
         dialogTitle: fileName,
       });
     }
+
+    // 1개 완료 후 진행률 업데이트 (i+1/total)
+    onProgress?.(i + 1, albums.length, album.title || '앨범');
   }
 
   // 모든 PDF 생성 완료 → 콜백 + 알림
