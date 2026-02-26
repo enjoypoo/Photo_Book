@@ -10,7 +10,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Album, Child, RootStackParamList } from '../types';
 import { loadAlbums, loadChildren } from '../store/albumStore';
-import { generatePDF, requestNotificationPermission, PageSize, LayoutType, ProgressCallback } from '../utils/pdfGenerator';
+import { generatePDF, requestNotificationPermission, PageSize, LayoutType, ProgressCallback, PdfThemeKey, PdfThemeConfig, PDF_THEMES } from '../utils/pdfGenerator';
 import { COLORS, WEATHER_LABEL } from '../constants';
 import { formatDateKorean } from '../utils/dateUtils';
 
@@ -72,6 +72,7 @@ export default function ExportPDFScreen() {
   const [progress, setProgress] = useState<{ percent: number; albumTitle: string; step: string } | null>(null);
   const [pageSize, setPageSize] = useState<PageSize>('A5');
   const [layout, setLayout] = useState<LayoutType>('feature');
+  const [pdfTheme, setPdfTheme] = useState<PdfThemeConfig>(PDF_THEMES[0]);
   // 선택 진입 시: 선택된 앨범만 표시 / false면 전체 표시
   const [showSelectedOnly, setShowSelectedOnly] = useState(hasPreselected);
 
@@ -128,7 +129,6 @@ export default function ExportPDFScreen() {
           setProgress({ percent, albumTitle, step });
         },
         (count) => {
-          // 모든 PDF 완료 → 팝업 + 확인 누르면 이전 화면으로
           setGenerating(false);
           setProgress(null);
           Alert.alert(
@@ -144,6 +144,7 @@ export default function ExportPDFScreen() {
           );
         },
         childColorMap,
+        pdfTheme,
       );
     } catch (e) {
       Alert.alert('오류', 'PDF 생성 중 문제가 발생했습니다.');
@@ -254,6 +255,45 @@ export default function ExportPDFScreen() {
               </ScrollView>
             </View>
 
+            {/* ── PDF 배경 테마 선택 ── */}
+            <View style={styles.section}>
+              <View style={styles.sectionTitleRow}>
+                <Ionicons name="color-palette-outline" size={14} color={COLORS.text} style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTitle}>배경 테마</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.layoutScroll}>
+                {PDF_THEMES.map((t) => {
+                  const isActive = pdfTheme.key === t.key;
+                  return (
+                    <TouchableOpacity
+                      key={t.key}
+                      style={[styles.themeCard, isActive && styles.themeCardActive]}
+                      onPress={() => setPdfTheme(t)}
+                      activeOpacity={0.8}
+                    >
+                      {/* 색상 미리보기 */}
+                      <View style={[styles.themePreviewBox, {
+                        backgroundColor:
+                          t.pageBackground.startsWith('linear') || t.pageBackground.startsWith('radial')
+                            ? '#e5e7eb'
+                            : t.pageBackground,
+                      }]}>
+                        <View style={[styles.themePreviewFrame, { borderColor: t.pageBackground === '#121212' ? '#333' : '#ccc' }]} />
+                        {t.isPro && (
+                          <View style={styles.probadge}>
+                            <Text style={styles.probadgeText}>PRO</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.themeLabel, isActive && styles.themeLabelActive]}>
+                        {t.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
             {/* 앨범 섹션 헤더 */}
             <View style={styles.albumSectionHeader}>
               <View style={styles.sectionTitleRow}>
@@ -360,6 +400,11 @@ export default function ExportPDFScreen() {
             <Text style={styles.footerSummaryItem}>
               {LAYOUTS.find(l => l.key === layout)?.label}
             </Text>
+          </View>
+          <Text style={styles.footerSummaryDot}>·</Text>
+          <View style={styles.footerSummaryItemRow}>
+            <Ionicons name="color-palette-outline" size={11} color={COLORS.textSecondary} style={{ marginRight: 3 }} />
+            <Text style={styles.footerSummaryItem}>{pdfTheme.label}</Text>
           </View>
           <Text style={styles.footerSummaryDot}>·</Text>
           <View style={styles.footerSummaryItemRow}>
@@ -598,6 +643,38 @@ const styles = StyleSheet.create({
   genBtnDisabled: { opacity: 0.45 },
   genBtnContent: { flexDirection: 'row', alignItems: 'center' },
   genBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  /* ── 테마 카드 ── */
+  themeCard: {
+    width: 88, marginRight: 10, padding: 10,
+    backgroundColor: COLORS.card, borderRadius: 16,
+    borderWidth: 2, borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  themeCardActive: {
+    borderColor: COLORS.purple, backgroundColor: COLORS.purplePastel,
+  },
+  themePreviewBox: {
+    width: 60, height: 44, borderRadius: 8,
+    marginBottom: 7, overflow: 'hidden',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  themePreviewFrame: {
+    width: 40, height: 28, borderRadius: 4,
+    borderWidth: 1.5, backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  probadge: {
+    position: 'absolute', top: 3, right: 3,
+    backgroundColor: '#F59E0B', borderRadius: 4,
+    paddingHorizontal: 4, paddingVertical: 1,
+  },
+  probadgeText: { fontSize: 8, fontWeight: '800', color: '#fff' },
+  themeLabel: {
+    fontSize: 11, fontWeight: '600', color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  themeLabelActive: { color: COLORS.purple, fontWeight: '700' },
 
   /* ── 진행상황 바 ── */
   progressBar: {

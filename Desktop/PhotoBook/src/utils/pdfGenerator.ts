@@ -10,6 +10,144 @@ import { WEATHER_LABEL } from '../constants';
 export type PageSize = 'A4' | 'A5';
 export type LayoutType = 'single' | 'two_col' | 'feature' | 'magazine' | 'three_col';
 
+export type PdfThemeKey =
+  | 'modern'    // 무료
+  | 'retro'     | 'grid'      | 'baby'
+  | 'polaroid'  | 'film'      | 'lined'
+  | 'nature'    | 'airmail'   | 'midnight'; // PRO
+
+export interface PdfThemeConfig {
+  key: PdfThemeKey;
+  label: string;
+  isPro: boolean;
+  /** 페이지 div의 background CSS (color or gradient or pattern) */
+  pageBackground: string;
+  /** 사진 프레임 추가 CSS */
+  frameStyle: string;
+  /** 캡션 텍스트 color */
+  captionColor: string;
+  /** 캡션 폰트 패밀리 */
+  captionFont: string;
+  /** 헤더 배경 CSS (없으면 #fff) */
+  headerBackground?: string;
+  /** 헤더 텍스트 컬러 오버라이드 (없으면 기본) */
+  headerTextColor?: string;
+  /** 페이지 패딩 오버라이드 (없으면 기본) */
+  pagePadding?: string;
+}
+
+export const PDF_THEMES: PdfThemeConfig[] = [
+  /* ── 1. 모던 심플 (무료 기본) ── */
+  {
+    key: 'modern',
+    label: '모던 심플',
+    isPro: false,
+    pageBackground: '#FAFAFA',
+    frameStyle: 'background:#FFFFFF;padding:10px;border:1px solid #EAEAEA;box-shadow:0 4px 12px rgba(0,0,0,0.05);border-radius:8px;',
+    captionColor: '#333333',
+    captionFont: "'Helvetica Neue', sans-serif",
+  },
+  /* ── 2. 클래식 레트로 (PRO) ── */
+  {
+    key: 'retro',
+    label: '클래식 레트로',
+    isPro: true,
+    pageBackground: '#2b3a30',
+    pagePadding: '50px',
+    frameStyle: 'background:#1a241d;padding:2px;border:3px solid #D4AF37;',
+    captionColor: '#E8DCC4',
+    captionFont: "Georgia, serif",
+    headerBackground: '#1a241d',
+    headerTextColor: '#D4AF37',
+  },
+  /* ── 3. 모눈종이 다이어리 (PRO) ── */
+  {
+    key: 'grid',
+    label: '모눈 다이어리',
+    isPro: true,
+    pageBackground: `#FFFFFF`,
+    frameStyle: 'background:#FFFFFF;padding:10px;padding-bottom:30px;border:1px solid #DDDDDD;transform:rotate(-1deg);box-shadow:2px 2px 5px rgba(0,0,0,0.1);',
+    captionColor: '#555555',
+    captionFont: "cursive",
+  },
+  /* ── 4. 파스텔 베이비 (PRO) ── */
+  {
+    key: 'baby',
+    label: '파스텔 베이비',
+    isPro: true,
+    pageBackground: 'radial-gradient(circle at center, #FFFDE7 0%, #FFF9C4 100%)',
+    frameStyle: 'background:#FFFFFF;padding:10px;border-radius:20px;box-shadow:0 8px 20px rgba(255,204,128,0.3);border:3px solid #FFF59D;',
+    captionColor: '#795548',
+    captionFont: "sans-serif",
+  },
+  /* ── 5. 폴라로이드 (PRO) ── */
+  {
+    key: 'polaroid',
+    label: '폴라로이드',
+    isPro: true,
+    pageBackground: '#EFEFEF',
+    pagePadding: '50px',
+    frameStyle: 'background:#FFFFFF;padding:15px 15px 55px 15px;box-shadow:0 10px 20px rgba(0,0,0,0.15);',
+    captionColor: '#222222',
+    captionFont: "cursive",
+  },
+  /* ── 6. 필름 스트립 (PRO) ── */
+  {
+    key: 'film',
+    label: '필름 스트립',
+    isPro: true,
+    pageBackground: '#111111',
+    frameStyle: 'background:#000000;padding:10px 40px;border:2px solid #333;',
+    captionColor: '#F3F3F3',
+    captionFont: "'Courier New', monospace",
+    headerBackground: '#000000',
+    headerTextColor: '#CCCCCC',
+  },
+  /* ── 7. 줄무늬 노트 (PRO) ── */
+  {
+    key: 'lined',
+    label: '줄무늬 노트',
+    isPro: true,
+    pageBackground: '#FDFBF7',
+    frameStyle: 'background:#FFFFFF;padding:10px;border:1px solid #EAEAEA;transform:rotate(1deg);',
+    captionColor: '#4A4A4A',
+    captionFont: "sans-serif",
+  },
+  /* ── 8. 보태니컬 그린 (PRO) ── */
+  {
+    key: 'nature',
+    label: '보태니컬 그린',
+    isPro: true,
+    pageBackground: 'linear-gradient(135deg, #F1F8E9 0%, #DCEDC8 100%)',
+    frameStyle: 'background:#FFFFFF;padding:8px;border-radius:4px;box-shadow:2px 4px 10px rgba(51,105,30,0.1);',
+    captionColor: '#33691E',
+    captionFont: "sans-serif",
+  },
+  /* ── 9. 에어메일 (PRO) ── */
+  {
+    key: 'airmail',
+    label: '에어메일',
+    isPro: true,
+    pageBackground: '#FAFAFA',
+    pagePadding: '30px',
+    frameStyle: 'background:#FFFFFF;padding:5px;border:1px solid #CCCCCC;',
+    captionColor: '#111111',
+    captionFont: "sans-serif",
+  },
+  /* ── 10. 미드나잇 다크 (PRO) ── */
+  {
+    key: 'midnight',
+    label: '미드나잇 다크',
+    isPro: true,
+    pageBackground: '#121212',
+    frameStyle: 'background:#1E1E1E;padding:10px;border-radius:8px;box-shadow:0 4px 15px rgba(0,0,0,0.5);',
+    captionColor: '#E0E0E0',
+    captionFont: "sans-serif",
+    headerBackground: '#1E1E1E',
+    headerTextColor: '#E0E0E0',
+  },
+];
+
 /* ── 용지 크기 (pt 단위, 72dpi 기준) ────────────────── */
 const PAGE_DIMENSIONS: Record<PageSize, { width: number; height: number }> = {
   A4: { width: 595, height: 842 },
@@ -71,23 +209,24 @@ const ICON_CAMERA_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="40" heig
 </svg>`;
 
 /* ── 이미지 태그 생성 ────────────────────────────────── */
-function imgTag(b64: string, extraStyle: string = ''): string {
-  // height가 extraStyle에 명시된 경우 height:auto 대신 사용
+function imgTag(b64: string, extraStyle: string = '', frameStyle: string = ''): string {
   const hasHeight = extraStyle.includes('height:');
-  const base = `display:block;width:100%;${hasHeight ? '' : 'height:auto;'}border-radius:8px;object-fit:contain;${extraStyle}`;
-  return b64
+  const base = `display:block;width:100%;${hasHeight ? '' : 'height:auto;'}object-fit:contain;${extraStyle}`;
+  const img = b64
     ? `<img src="${b64}" style="${base}" />`
     : `<div style="min-height:80px;background:#f3e8ff;border-radius:8px;
         align-items:center;justify-content:center;
         display:flex;${extraStyle}">${ICON_CAMERA_SVG}</div>`;
+  if (!frameStyle) return img;
+  return `<div style="${frameStyle}">${img}</div>`;
 }
 
-/* ── 캡션 HTML ───────────────────────────────────────── */
-function captionHtml(caption: string): string {
+/* ── 캡션 HTML (테마 색상 적용) ────────────────────────── */
+function captionHtml(caption: string, color = '#6b7280', font = 'sans-serif'): string {
   if (!caption) return '';
-  return `<p style="font-size:10px;color:#6b7280;margin:3px 0 0 0;font-style:italic;
+  return `<p style="font-size:10px;color:${color};margin:3px 0 0 0;font-style:italic;
     padding:5px 8px;background:#fdf2f8;border-radius:5px;border-left:3px solid #f472b6;
-    line-height:1.4;">${caption}</p>`;
+    line-height:1.4;font-family:${font};">${caption}</p>`;
 }
 
 /* ── 기본 테마색 ─────────────────────────────────────── */
@@ -164,27 +303,30 @@ function pageHeaderHtml(
   paddingS: number,
   paddingH: number,
   themeColor: string,
+  headerBg: string = '#fff',
 ): string {
-  const countSize = titleSize + 2; // 장수 크기 (앨범명보다 약간 크게)
+  const countSize = titleSize + 2;
   const iconSize = metaSize + 2;
+  const titleColor = headerBg === '#fff' ? '#1f2937' : themeColor;
+  const metaColor  = headerBg === '#fff' ? '#6b7280' : themeColor + 'bb';
   return `
     <div style="
       padding:${paddingH}px ${paddingS}px ${paddingH}px ${paddingS}px;
-      background:#fff;
+      background:${headerBg};
       border-bottom:3px solid ${themeColor};
       display:flex;align-items:stretch;">
       <!-- 왼쪽: 행1(앨범명) + 행2(날짜·위치·날씨) -->
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:space-between;">
-        <div style="font-size:${titleSize}px;font-weight:800;color:#1f2937;
+        <div style="font-size:${titleSize}px;font-weight:800;color:${titleColor};
           white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;">
           ${title}
         </div>
-        <div style="font-size:${metaSize}px;color:#6b7280;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+        <div style="font-size:${metaSize}px;color:${metaColor};display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
           <span style="display:inline-flex;align-items:center;">
-            ${svgCalendar(iconSize, '#6b7280')}${dateStr}
+            ${svgCalendar(iconSize, metaColor)}${dateStr}
           </span>
           ${location ? `<span style="display:inline-flex;align-items:center;">
-            ${svgLocation(iconSize, '#6b7280')}${location}
+            ${svgLocation(iconSize, metaColor)}${location}
           </span>` : ''}
           ${weatherStr ? `<span>${weatherStr}</span>` : ''}
         </div>
@@ -249,11 +391,13 @@ async function groupToHtml(
   group: Album['photos'],
   layout: LayoutType,
   pageSize: PageSize,
-  contentH: number,  // 사진 영역 실제 높이 (px)
-  paddingS: number,  // 좌우 패딩
-  gap: number,       // 사진 사이 간격
+  contentH: number,
+  paddingS: number,
+  gap: number,
+  frameStyle: string = '',
+  captionColor: string = '#6b7280',
+  captionFont: string = 'sans-serif',
 ): Promise<string> {
-  // 캡션 예상 높이 (캡션 있을 때만)
   const captionH = 22;
 
   // ── single: 1장 크게 ──────────────────────────────
@@ -266,23 +410,21 @@ async function groupToHtml(
       <div style="padding:${gap}px ${paddingS}px;height:${contentH}px;box-sizing:border-box;overflow:hidden;">
         <div style="height:100%;display:flex;flex-direction:column;">
           <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
-            ${imgTag(b64, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`)}
+            ${imgTag(b64, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`, frameStyle)}
           </div>
-          ${captionHtml(p.caption)}
+          ${captionHtml(p.caption, captionColor, captionFont)}
         </div>
       </div>`;
   }
 
   // ── two_col / feature(복수장): 2열, 최대 2행 (4장/페이지) ───────────
   if (layout === 'two_col' || (layout === 'feature' && group.length !== 1)) {
-    // group 최대 4장: row0=[0,1], row1=[2,3]
     const rows: PhotoEntry[][] = [];
     for (let i = 0; i < group.length; i += 2) rows.push(group.slice(i, i + 2));
     const numRows = rows.length;
     const hasCap = group.some(p => !!p.caption);
     const capRowH = hasCap ? captionH : 0;
-    // 행 높이: 전체 사용 가능 높이를 행 수로 균등 분할
-    const totalVertGap = gap * (numRows + 1); // 상단 + 행 사이 + 하단
+    const totalVertGap = gap * (numRows + 1);
     const rowH = Math.floor((contentH - totalVertGap) / numRows);
     const imgH = rowH - capRowH;
 
@@ -294,16 +436,16 @@ async function groupToHtml(
         <div style="display:flex;gap:${gap}px;height:${rowH}px;flex-shrink:0;">
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
             <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
-              ${imgTag(b64L, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`)}
+              ${imgTag(b64L, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`, frameStyle)}
             </div>
-            ${captionHtml(left.caption)}
+            ${captionHtml(left.caption, captionColor, captionFont)}
           </div>
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
             ${right ? `
             <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
-              ${imgTag(b64R, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`)}
+              ${imgTag(b64R, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`, frameStyle)}
             </div>
-            ${captionHtml(right.caption)}` : ''}
+            ${captionHtml(right.caption, captionColor, captionFont)}` : ''}
           </div>
         </div>`;
     }));
@@ -326,9 +468,9 @@ async function groupToHtml(
       <div style="padding:${gap}px ${paddingS}px;height:${contentH}px;box-sizing:border-box;overflow:hidden;">
         <div style="height:100%;display:flex;flex-direction:column;">
           <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
-            ${imgTag(b64, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`)}
+            ${imgTag(b64, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`, frameStyle)}
           </div>
-          ${captionHtml(p.caption)}
+          ${captionHtml(p.caption, captionColor, captionFont)}
         </div>
       </div>`;
   }
@@ -354,25 +496,25 @@ async function groupToHtml(
         <!-- 와이드 이미지 -->
         <div style="height:${wideH}px;margin-bottom:${gap}px;display:flex;flex-direction:column;">
           <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
-            ${imgTag(b64W, `max-height:${wideImgH}px;object-fit:contain;width:100%;height:${wideImgH}px;`)}
+            ${imgTag(b64W, `max-height:${wideImgH}px;object-fit:contain;width:100%;height:${wideImgH}px;`, frameStyle)}
           </div>
-          ${captionHtml(wide.caption)}
+          ${captionHtml(wide.caption, captionColor, captionFont)}
         </div>
         <!-- 하단 2열 -->
         ${hasSmallRow ? `
         <div style="display:flex;gap:${gap}px;height:${smallH}px;">
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
             <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
-              ${imgTag(b64L, `max-height:${smallImgH}px;object-fit:contain;width:100%;height:${smallImgH}px;`)}
+              ${imgTag(b64L, `max-height:${smallImgH}px;object-fit:contain;width:100%;height:${smallImgH}px;`, frameStyle)}
             </div>
-            ${captionHtml(left?.caption ?? '')}
+            ${captionHtml(left?.caption ?? '', captionColor, captionFont)}
           </div>
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
             ${right ? `
             <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
-              ${imgTag(b64R, `max-height:${smallImgH}px;object-fit:contain;width:100%;height:${smallImgH}px;`)}
+              ${imgTag(b64R, `max-height:${smallImgH}px;object-fit:contain;width:100%;height:${smallImgH}px;`, frameStyle)}
             </div>
-            ${captionHtml(right?.caption ?? '')}` : ''}
+            ${captionHtml(right?.caption ?? '', captionColor, captionFont)}` : ''}
           </div>
         </div>` : ''}
       </div>`;
@@ -396,9 +538,9 @@ async function groupToHtml(
         return `
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
             <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
-              ${imgTag(b64, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`)}
+              ${imgTag(b64, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`, frameStyle)}
             </div>
-            ${captionHtml(p.caption)}
+            ${captionHtml(p.caption, captionColor, captionFont)}
           </div>`;
       }));
       while (cells.length < 3) cells.push(`<div style="flex:1;"></div>`);
@@ -454,26 +596,21 @@ async function buildAlbumHtml(
   layout: LayoutType,
   pageSize: PageSize,
   themeColor: string = DEFAULT_THEME,
+  pdfTheme: PdfThemeConfig = PDF_THEMES[0],
 ): Promise<string> {
   const isA5     = pageSize === 'A5';
   const titleSize = isA5 ? 14 : 18;
   const metaSize  = isA5 ? 9  : 11;
   const storySize = isA5 ? 10 : 12;
-  const paddingH  = isA5 ? 8  : 12;   // 헤더 상하 패딩
-  const paddingS  = isA5 ? 12 : 16;   // 좌우 패딩
-  const gap       = isA5 ? 6  : 8;    // 사진 사이 간격
+  const paddingH  = isA5 ? 8  : 12;
+  const paddingS  = isA5 ? 12 : 16;
+  const gap       = isA5 ? 6  : 8;
 
-  // 페이지 높이 (pt = px in expo-print)
   const pageH = isA5 ? 595 : 842;
-
-  // 헤더 높이: 상패딩 + 행1(앨범명) + 4 + 행2(메타) + 하패딩 + border 3px
   const row1H   = isA5 ? 18 : 22;
   const row2H   = isA5 ? 14 : 17;
   const headerH = paddingH + row1H + 4 + row2H + paddingH + 3;
-  // A5: 8+18+4+14+8+3=55   A4: 12+22+4+17+12+3=70
-
-  // 본문 영역 높이 (사진이 들어갈 공간)
-  const contentH = pageH - headerH - paddingH; // 하단 여백 포함
+  const contentH = pageH - headerH - paddingH;
 
   const weatherStr = album.weatherEmoji
     ? `${album.weatherEmoji} ${WEATHER_LABEL[album.weather] ?? album.weather}`
@@ -481,18 +618,23 @@ async function buildAlbumHtml(
   const dateStr    = formatDateKorean(album.date);
   const albumTitle = album.title || '우리 아이의 하루';
 
-  // 매 페이지 상단에 직접 삽입할 헤더
+  // ── 테마별 헤더 배경/텍스트 색상 ──
+  const headerBg   = pdfTheme.headerBackground ?? '#fff';
+  const headerTxt  = pdfTheme.headerTextColor  ?? themeColor;
+
   const header = pageHeaderHtml(
     albumTitle, album.photos.length, dateStr,
     album.location || '', weatherStr,
     titleSize, metaSize, paddingS, paddingH,
-    themeColor,
+    headerTxt,
+    headerBg,
   );
 
-  // 이야기 블록 (1페이지에만) — 테마색 배경 + 왼쪽 선
+  // ── 이야기 블록 ──
+  const storyTextColor = pdfTheme.headerTextColor ?? '#333';
   const storyHtml = album.story
     ? `<div style="margin:${gap}px ${paddingS}px;">
-        <p style="margin:0;font-size:${storySize}px;color:#333;line-height:1.8;
+        <p style="margin:0;font-size:${storySize}px;color:${storyTextColor};line-height:1.8;
           background:${lightBg(themeColor)};
           padding:${isA5 ? 10 : 14}px ${isA5 ? 12 : 16}px;
           border-radius:12px;border-left:4px solid ${themeColor};">
@@ -501,7 +643,6 @@ async function buildAlbumHtml(
       </div>`
     : '';
 
-  // story 높이 추정
   const storyH = album.story
     ? Math.min(
         Math.ceil(album.story.length / 38) * Math.round(storySize * 1.6) + 24,
@@ -509,37 +650,45 @@ async function buildAlbumHtml(
       )
     : 0;
 
-  // 사진 그룹 분할
   const groups = groupPhotos(album.photos, layout);
-
-  // 각 페이지 HTML 생성
   const pages: string[] = [];
+
+  // ── 테마별 페이지 배경 CSS ──
+  const pageBgStyle = buildPageBgStyle(pdfTheme);
+  const pagePadding = pdfTheme.pagePadding ?? '0px';
 
   for (let g = 0; g < groups.length; g++) {
     const isFirst    = g === 0;
     const availableH = isFirst ? contentH - storyH - (storyH > 0 ? gap * 2 : 0) : contentH;
-    const groupHtml  = await groupToHtml(groups[g], layout, pageSize, availableH, paddingS, gap);
+    const groupHtml  = await groupToHtml(
+      groups[g], layout, pageSize, availableH, paddingS, gap,
+      pdfTheme.frameStyle, pdfTheme.captionColor, pdfTheme.captionFont,
+    );
 
     pages.push(`
       <div style="
         page-break-before:${isFirst ? 'auto' : 'always'};
         page-break-after:always;
         page-break-inside:avoid;
-        background:#fff;">
+        ${pageBgStyle}
+        padding:${pagePadding};
+        box-sizing:border-box;">
         ${header}
         ${isFirst ? storyHtml : ''}
         ${groupHtml}
       </div>`);
   }
 
-  // 사진이 없을 때 빈 페이지
   if (pages.length === 0) {
     pages.push(`
-      <div style="background:#fff;">
+      <div style="${pageBgStyle}">
         ${header}
         <p style="text-align:center;color:#9ca3af;padding:40px;font-size:14px;">사진이 없습니다.</p>
       </div>`);
   }
+
+  // ── 테마별 추가 글로벌 CSS ──
+  const themeExtraCss = buildThemeExtraCss(pdfTheme);
 
   return `
     <!DOCTYPE html><html>
@@ -548,13 +697,59 @@ async function buildAlbumHtml(
       <title>${albumTitle}</title>
       <style>
         * { box-sizing:border-box; margin:0; padding:0; }
-        body { background:#fff; font-family:-apple-system,'Apple SD Gothic Neo','Noto Sans KR',sans-serif; }
+        body { font-family:-apple-system,'Apple SD Gothic Neo','Noto Sans KR',sans-serif; }
         img { display:block; max-width:100%; height:auto; }
         @page { margin:0; size:${isA5 ? '420pt 595pt' : '595pt 842pt'}; }
+        ${themeExtraCss}
       </style>
     </head>
     <body>${pages.join('\n')}</body>
     </html>`;
+}
+
+/* ── 테마 페이지 배경 CSS 문자열 생성 ─────────────────── */
+function buildPageBgStyle(theme: PdfThemeConfig): string {
+  const bg = theme.pageBackground;
+  // gradient 또는 패턴이면 background shorthand, 단색이면 background-color
+  if (bg.startsWith('linear-gradient') || bg.startsWith('radial-gradient')) {
+    return `background:${bg};`;
+  }
+  return `background-color:${bg};`;
+}
+
+/* ── 테마별 추가 글로벌 CSS ────────────────────────────── */
+function buildThemeExtraCss(theme: PdfThemeConfig): string {
+  switch (theme.key) {
+    case 'grid':
+      return `
+        body {
+          background-image:
+            linear-gradient(#F0F0F0 1px, transparent 1px),
+            linear-gradient(90deg, #F0F0F0 1px, transparent 1px);
+          background-size: 20px 20px;
+        }`;
+    case 'lined':
+      return `
+        body {
+          background-image: repeating-linear-gradient(
+            transparent, transparent 39px, #E0D4C8 40px
+          );
+        }`;
+    case 'airmail':
+      return `
+        div[data-page] {
+          border: 15px solid transparent;
+          border-image: repeating-linear-gradient(
+            -45deg,
+            #D32F2F, #D32F2F 15px,
+            transparent 15px, transparent 30px,
+            #1976D2 30px, #1976D2 45px,
+            transparent 45px, transparent 60px
+          ) 15;
+        }`;
+    default:
+      return '';
+  }
 }
 
 /* ══════════════════════════════════════════════════════
@@ -580,7 +775,8 @@ export async function generatePDF(
   layout: LayoutType = 'feature',
   onProgress?: ProgressCallback,
   onComplete?: (count: number) => void,
-  childColorMap?: Record<string, string>, // childId → 테마색
+  childColorMap?: Record<string, string>,
+  pdfTheme: PdfThemeConfig = PDF_THEMES[0],
 ): Promise<void> {
   const { width, height } = PAGE_DIMENSIONS[pageSize];
   const canShare = await Sharing.isAvailableAsync();
@@ -621,7 +817,7 @@ export async function generatePDF(
     // ── 단계 3: HTML + PDF 변환 (75% → 85% → 95%)
     onProgress?.(pct(0.80), title, '페이지 레이아웃 구성 중...');
     const themeColor = childColorMap?.[album.childId] ?? DEFAULT_THEME;
-    const html = await buildAlbumHtml(album, layout, pageSize, themeColor);
+    const html = await buildAlbumHtml(album, layout, pageSize, themeColor, pdfTheme);
 
     onProgress?.(pct(0.88), title, 'PDF 변환 중...');
     const { uri: rawUri } = await Print.printToFileAsync({ html, width, height, base64: false });
