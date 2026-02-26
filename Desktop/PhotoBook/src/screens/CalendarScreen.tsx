@@ -3,6 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet,
   SafeAreaView, StatusBar, FlatList, Image,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -126,11 +127,11 @@ export default function CalendarScreen() {
               {/* 달 이동 헤더 */}
               <View style={styles.calHeader}>
                 <TouchableOpacity onPress={prevMonth} style={styles.monthBtn}>
-                  <Text style={styles.monthBtnText}>‹</Text>
+                  <Ionicons name="chevron-back" size={24} color={COLORS.text} />
                 </TouchableOpacity>
                 <Text style={styles.monthTitle}>{curYear}년 {String(curMonth + 1).padStart(2, '0')}월</Text>
                 <TouchableOpacity onPress={nextMonth} style={styles.monthBtn}>
-                  <Text style={styles.monthBtnText}>›</Text>
+                  <Ionicons name="chevron-forward" size={24} color={COLORS.text} />
                 </TouchableOpacity>
               </View>
 
@@ -203,7 +204,7 @@ export default function CalendarScreen() {
 
               {selectedAlbums.length === 0 ? (
                 <View style={styles.emptyAlbum}>
-                  <Text style={styles.emptyAlbumIcon}>📷</Text>
+                  <Ionicons name="camera-outline" size={40} color={COLORS.textSecondary} style={{ marginBottom: 8 }} />
                   <Text style={styles.emptyAlbumText}>이 날의 앨범이 없어요</Text>
                 </View>
               ) : (
@@ -236,18 +237,25 @@ function AlbumRow({ album, onPress }: { album: Album; onPress: () => void }) {
         <Image source={{ uri: cover.uri }} style={styles.albumThumb} />
       ) : (
         <View style={[styles.albumThumb, styles.albumThumbEmpty]}>
-          <Text style={{ fontSize: 24 }}>📷</Text>
+          <Ionicons name="camera-outline" size={24} color={COLORS.textMuted} />
         </View>
       )}
       {/* 정보 */}
       <View style={styles.albumRowInfo}>
         <Text style={styles.albumRowTitle} numberOfLines={1}>{album.title}</Text>
-        <Text style={styles.albumRowMeta}>
-          📷 {album.photos.length}장
-          {album.location ? `  📍 ${album.location}` : ''}
-        </Text>
+        <View style={styles.albumRowMetaRow}>
+          <Ionicons name="camera-outline" size={11} color={COLORS.textSecondary} style={{ marginRight: 3 }} />
+          <Text style={styles.albumRowMeta}>{album.photos.length}장</Text>
+          {album.location ? (
+            <>
+              <Text style={styles.albumRowMetaSep}>  </Text>
+              <Ionicons name="location-outline" size={11} color={COLORS.textSecondary} style={{ marginRight: 3 }} />
+              <Text style={styles.albumRowMeta}>{album.location}</Text>
+            </>
+          ) : null}
+        </View>
       </View>
-      <Text style={styles.albumRowChevron}>›</Text>
+      <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} style={{ paddingRight: 12 }} />
     </TouchableOpacity>
   );
 }
@@ -276,7 +284,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   monthBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  monthBtnText: { fontSize: 28, color: COLORS.text, fontWeight: '400' },
   monthTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
 
   weekRow: { flexDirection: 'row', marginBottom: 8 },
@@ -332,7 +339,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.8)',
   },
-  emptyAlbumIcon: { fontSize: 40, marginBottom: 8 },
   emptyAlbumText: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '500' },
 
   /* 앨범 행 카드 */
@@ -351,6 +357,7 @@ const styles = StyleSheet.create({
   },
   albumRowInfo: { flex: 1, paddingHorizontal: 14, paddingVertical: 12 },
   albumRowTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
+  albumRowMetaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
   albumRowMeta: { fontSize: 12, color: COLORS.textSecondary },
-  albumRowChevron: { fontSize: 20, color: COLORS.textMuted, paddingRight: 12 },
+  albumRowMetaSep: { fontSize: 12, color: COLORS.textSecondary },
 });

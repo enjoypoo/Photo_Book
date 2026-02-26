@@ -4,6 +4,7 @@ import {
   SafeAreaView, StatusBar, Alert, ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -79,7 +80,7 @@ export default function SettingsScreen() {
    ─────────────────────────────────────────────────── */
   const handleExport = async () => {
     Alert.alert(
-      '📤 데이터 내보내기',
+      '데이터 내보내기',
       '모든 그룹, 앨범, 사진을 하나의 파일로 내보냅니다.\n사진이 많으면 시간이 걸릴 수 있어요.',
       [
         { text: '취소', style: 'cancel' },
@@ -169,7 +170,7 @@ export default function SettingsScreen() {
    ─────────────────────────────────────────────────── */
   const handleImport = async () => {
     Alert.alert(
-      '📥 데이터 가져오기',
+      '데이터 가져오기',
       '백업 파일(.photobook)을 선택해주세요.\n가져온 데이터를 기존 데이터와 병합하거나 교체할 수 있어요.',
       [
         { text: '취소', style: 'cancel' },
@@ -307,7 +308,7 @@ export default function SettingsScreen() {
   /* 전체 데이터 삭제 */
   const handleClearAllData = () => {
     Alert.alert(
-      '⚠️ 전체 데이터 삭제',
+      '전체 데이터 삭제',
       '모든 그룹, 앨범, 사진이 영구 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.',
       [
         { text: '취소', style: 'cancel' },
@@ -398,7 +399,7 @@ export default function SettingsScreen() {
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color={COLORS.purple} />
             <Text style={styles.loadingText}>
-              {exporting ? '📤 내보내는 중...\n사진이 많으면 잠시 기다려주세요' : '📥 가져오는 중...'}
+              {exporting ? '내보내는 중...\n사진이 많으면 잠시 기다려주세요' : '가져오는 중...'}
             </Text>
           </View>
         </View>
@@ -415,12 +416,15 @@ export default function SettingsScreen() {
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
             style={styles.statsGradient}
           >
-            <Text style={styles.statsTitle}>📊 사용 현황</Text>
+            <View style={styles.statsTitleRow}>
+              <Ionicons name="bar-chart-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.statsTitle}>사용 현황</Text>
+            </View>
             <View style={styles.statsRow}>
-              <StatItem icon="👥" label="그룹" value={`${groupCount}개`} />
-              <StatItem icon="📚" label="앨범" value={`${albumCount}개`} />
-              <StatItem icon="📷" label="사진" value={`${photoCount}장`} />
-              <StatItem icon="💾" label="용량" value={storageUsed} />
+              <StatItem icon="people-outline" label="그룹" value={`${groupCount}개`} />
+              <StatItem icon="book-outline" label="앨범" value={`${albumCount}개`} />
+              <StatItem icon="camera-outline" label="사진" value={`${photoCount}장`} />
+              <StatItem icon="save-outline" label="용량" value={storageUsed} />
             </View>
           </LinearGradient>
         </View>
@@ -430,8 +434,9 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           {/* 데이터 내보내기 */}
           <SettingRow
-            icon="📤"
+            icon="share-outline"
             iconBg="#EFF6FF"
+            iconColor="#3B82F6"
             title="데이터 내보내기"
             subtitle="그룹·앨범·사진 전체를 파일로 저장"
             onPress={handleExport}
@@ -439,24 +444,27 @@ export default function SettingsScreen() {
           <View style={styles.divider} />
           {/* 데이터 가져오기 */}
           <SettingRow
-            icon="📥"
+            icon="download-outline"
             iconBg="#F0FDF4"
+            iconColor="#10B981"
             title="데이터 가져오기"
             subtitle="백업 파일에서 데이터 복원"
             onPress={handleImport}
           />
           <View style={styles.divider} />
           <SettingRow
-            icon="🧹"
+            icon="brush-outline"
             iconBg="#EFF6FF"
+            iconColor="#6366F1"
             title="사진 파일 정리"
             subtitle="사용하지 않는 임시 파일 삭제"
             onPress={handleCleanup}
           />
           <View style={styles.divider} />
           <SettingRow
-            icon="🗑️"
+            icon="trash-outline"
             iconBg="#FEF2F2"
+            iconColor={COLORS.danger}
             title="전체 데이터 삭제"
             subtitle="모든 그룹·앨범·사진 영구 삭제"
             onPress={handleClearAllData}
@@ -466,7 +474,10 @@ export default function SettingsScreen() {
 
         {/* ── 백업 안내 ── */}
         <View style={styles.infoBox}>
-          <Text style={styles.infoBoxTitle}>💡 데이터 이전 방법</Text>
+          <View style={styles.infoBoxTitleRow}>
+            <Ionicons name="information-circle-outline" size={16} color={COLORS.purple} style={{ marginRight: 6 }} />
+            <Text style={styles.infoBoxTitle}>데이터 이전 방법</Text>
+          </View>
           <Text style={styles.infoBoxText}>
             1. 현재 폰에서 <Text style={styles.bold}>데이터 내보내기</Text>를 눌러 파일을 저장{'\n'}
             2. 카카오톡·이메일·클라우드로 파일을 새 폰으로 전송{'\n'}
@@ -480,33 +491,42 @@ export default function SettingsScreen() {
         {/* ── 앱 정보 ── */}
         <Text style={styles.sectionTitle}>앱 정보</Text>
         <View style={styles.section}>
-          <InfoRow icon="📱" label="버전" value={APP_VERSION} />
+          <InfoRow icon="phone-portrait-outline" label="버전" value={APP_VERSION} />
           <View style={styles.divider} />
-          <InfoRow icon="🛠️" label="제작" value="PhotoBook App" />
+          <InfoRow icon="construct-outline" label="제작" value="PhotoBook App" />
           <View style={styles.divider} />
-          <InfoRow icon="💾" label="저장 방식" value="기기 내 로컬 저장" />
+          <InfoRow icon="save-outline" label="저장 방식" value="기기 내 로컬 저장" />
           <View style={styles.divider} />
-          <InfoRow icon="🔒" label="개인정보" value="서버 전송 없음" />
+          <InfoRow icon="lock-closed-outline" label="개인정보" value="서버 전송 없음" />
         </View>
 
         {/* ── 도움말 ── */}
         <Text style={styles.sectionTitle}>도움말</Text>
         <View style={styles.section}>
           <View style={styles.helpCard}>
-            <Text style={styles.helpText}>
-              💡 <Text style={{ fontWeight: '700' }}>앨범 수정/삭제</Text>{'\n'}
+            <View style={styles.helpTitleRow}>
+              <Ionicons name="bulb-outline" size={14} color={COLORS.purple} style={{ marginRight: 6 }} />
+              <Text style={[styles.helpText, { fontWeight: '700' }]}>앨범 수정/삭제</Text>
+            </View>
+            <Text style={[styles.helpText, { marginTop: 6 }]}>
               앨범 목록에서 카드를 길게 누르면 수정 또는 삭제할 수 있습니다.
             </Text>
           </View>
           <View style={[styles.helpCard, { marginTop: 8 }]}>
-            <Text style={styles.helpText}>
-              💡 <Text style={{ fontWeight: '700' }}>PDF 내보내기</Text>{'\n'}
+            <View style={styles.helpTitleRow}>
+              <Ionicons name="bulb-outline" size={14} color={COLORS.purple} style={{ marginRight: 6 }} />
+              <Text style={[styles.helpText, { fontWeight: '700' }]}>PDF 내보내기</Text>
+            </View>
+            <Text style={[styles.helpText, { marginTop: 6 }]}>
               앨범 목록에서 PDF 버튼을 누르고 앨범을 선택하면 PDF로 저장할 수 있습니다.
             </Text>
           </View>
           <View style={[styles.helpCard, { marginTop: 8 }]}>
-            <Text style={styles.helpText}>
-              💡 <Text style={{ fontWeight: '700' }}>사진 날짜 자동 입력</Text>{'\n'}
+            <View style={styles.helpTitleRow}>
+              <Ionicons name="bulb-outline" size={14} color={COLORS.purple} style={{ marginRight: 6 }} />
+              <Text style={[styles.helpText, { fontWeight: '700' }]}>사진 날짜 자동 입력</Text>
+            </View>
+            <Text style={[styles.helpText, { marginTop: 6 }]}>
               앨범에 사진을 추가하면 EXIF 정보에서 촬영 날짜/시간이 자동으로 입력됩니다.
             </Text>
           </View>
@@ -517,10 +537,10 @@ export default function SettingsScreen() {
 }
 
 /* ── 통계 아이템 ── */
-function StatItem({ icon, label, value }: { icon: string; label: string; value: string }) {
+function StatItem({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }) {
   return (
     <View style={styles.statItem}>
-      <Text style={styles.statIcon}>{icon}</Text>
+      <Ionicons name={icon} size={28} color="rgba(255,255,255,0.9)" style={{ marginBottom: 6 }} />
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
@@ -529,33 +549,34 @@ function StatItem({ icon, label, value }: { icon: string; label: string; value: 
 
 /* ── 설정 행 ── */
 interface SettingRowProps {
-  icon: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
   iconBg: string;
+  iconColor: string;
   title: string;
   subtitle: string;
   onPress: () => void;
   danger?: boolean;
 }
-function SettingRow({ icon, iconBg, title, subtitle, onPress, danger }: SettingRowProps) {
+function SettingRow({ icon, iconBg, iconColor, title, subtitle, onPress, danger }: SettingRowProps) {
   return (
     <TouchableOpacity style={styles.settingRow} onPress={onPress} activeOpacity={0.7}>
       <View style={[styles.rowIconBox, { backgroundColor: iconBg }]}>
-        <Text style={styles.rowIcon}>{icon}</Text>
+        <Ionicons name={icon} size={22} color={iconColor} />
       </View>
       <View style={styles.rowInfo}>
         <Text style={[styles.rowTitle, danger && { color: COLORS.danger }]}>{title}</Text>
         <Text style={styles.rowSub}>{subtitle}</Text>
       </View>
-      <Text style={styles.rowChevron}>›</Text>
+      <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
     </TouchableOpacity>
   );
 }
 
 /* ── 정보 행 ── */
-function InfoRow({ icon, label, value }: { icon: string; label: string; value: string }) {
+function InfoRow({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }) {
   return (
     <View style={styles.infoRow}>
-      <Text style={styles.rowIcon}>{icon}</Text>
+      <Ionicons name={icon} size={20} color={COLORS.textSecondary} style={{ marginRight: 4 }} />
       <Text style={styles.infoLabel}>{label}</Text>
       <Text style={styles.infoValue}>{value}</Text>
     </View>
@@ -594,10 +615,10 @@ const styles = StyleSheet.create({
   statsCard: { borderRadius: 24, overflow: 'hidden', marginBottom: 28, elevation: 6,
     shadowColor: COLORS.pink, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 16 },
   statsGradient: { padding: 24 },
-  statsTitle: { fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 16 },
+  statsTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  statsTitle: { fontSize: 16, fontWeight: '700', color: '#fff' },
   statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
   statItem: { alignItems: 'center' },
-  statIcon: { fontSize: 28, marginBottom: 6 },
   statValue: { fontSize: 18, fontWeight: '800', color: '#fff', marginBottom: 2 },
   statLabel: { fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
 
@@ -623,7 +644,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.purplePastel ?? '#FAF5FF',
     borderLeftWidth: 4, borderLeftColor: COLORS.purple,
   },
-  infoBoxTitle: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 8 },
+  infoBoxTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  infoBoxTitle: { fontSize: 14, fontWeight: '700', color: COLORS.text },
   infoBoxText: { fontSize: 13, color: COLORS.text, lineHeight: 22 },
   infoBoxNote: { fontSize: 11, color: COLORS.textSecondary, marginTop: 8, lineHeight: 16 },
   bold: { fontWeight: '700' },
@@ -634,11 +656,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 14,
   },
   rowIconBox: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  rowIcon: { fontSize: 22 },
   rowInfo: { flex: 1 },
   rowTitle: { fontSize: 15, fontWeight: '600', color: COLORS.text },
   rowSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-  rowChevron: { fontSize: 20, color: COLORS.textMuted },
+  // rowChevron 제거됨 (Ionicons로 대체)
 
   /* 정보 행 */
   infoRow: {
@@ -653,5 +674,6 @@ const styles = StyleSheet.create({
     margin: 12,
     backgroundColor: '#F9F5FF', borderRadius: 14, padding: 14,
   },
+  helpTitleRow: { flexDirection: 'row', alignItems: 'center' },
   helpText: { fontSize: 13, color: COLORS.text, lineHeight: 20 },
 });

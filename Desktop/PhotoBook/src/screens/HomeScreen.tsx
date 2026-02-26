@@ -4,6 +4,7 @@ import {
   Alert, SafeAreaView, StatusBar, Dimensions, Image,
   Animated,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -117,7 +118,7 @@ export default function HomeScreen() {
       >
         <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>우리 추억 앨범</Text>
-          <Text style={styles.headerSub}>소중한 순간을 기록해요 💕</Text>
+          <Text style={styles.headerSub}>소중한 순간을 기록해요</Text>
         </View>
 
         {pdfMode ? (
@@ -156,6 +157,7 @@ export default function HomeScreen() {
                 onPress={() => setPdfMode(true)}
                 activeOpacity={0.8}
               >
+                <Ionicons name="document-text-outline" size={15} color="#fff" style={{ marginRight: 5 }} />
                 <Text style={styles.pdfIconText}>PDF</Text>
               </TouchableOpacity>
             )}
@@ -169,7 +171,7 @@ export default function HomeScreen() {
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={styles.addBtn}
               >
-                <Text style={styles.addBtnText}>+</Text>
+                <Ionicons name="add" size={28} color="#fff" />
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -186,14 +188,15 @@ export default function HomeScreen() {
       {/* PDF 선택 모드 안내 배너 */}
       {pdfMode && (
         <View style={styles.pdfBanner}>
-          <Text style={styles.pdfBannerText}>📄 PDF로 내보낼 그룹을 선택하세요</Text>
+          <Ionicons name="document-text-outline" size={15} color={COLORS.purple} style={{ marginRight: 6 }} />
+          <Text style={styles.pdfBannerText}>PDF로 내보낼 그룹을 선택하세요</Text>
         </View>
       )}
 
       {children.length === 0 ? (
         /* ── 빈 상태 ── */
         <Animated.View style={[styles.empty, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          <Text style={styles.emptyIcon}>🎨</Text>
+          <Ionicons name="color-palette-outline" size={80} color={COLORS.purple} style={{ marginBottom: 20 }} />
           <Text style={styles.emptyTitle}>첫 그룹을 만들어보세요</Text>
           <Text style={styles.emptyDesc}>
             그룹을 등록하고{'\n'}소중한 순간을 기록하세요
@@ -207,7 +210,8 @@ export default function HomeScreen() {
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={styles.emptyBtn}
             >
-              <Text style={styles.emptyBtnText}>+ 그룹 추가하기</Text>
+              <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.emptyBtnText}>그룹 추가하기</Text>
             </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
@@ -297,7 +301,7 @@ function ChildCard({ item, albumCount, index, pdfMode, selected, onPress, onLong
             { borderColor: item.color },
             selected && { backgroundColor: item.color },
           ]}>
-            {selected && <Text style={styles.checkmark}>✓</Text>}
+            {selected && <Ionicons name="checkmark" size={14} color="#fff" />}
           </View>
         )}
 
@@ -324,14 +328,20 @@ function ChildCard({ item, albumCount, index, pdfMode, selected, onPress, onLong
           </View>
           <View style={styles.cardMeta}>
             {item.birthDate ? (
-              <Text style={styles.metaItem}>📅 {item.birthDate}</Text>
+              <View style={styles.metaRow}>
+                <Ionicons name="calendar-outline" size={13} color={COLORS.textSecondary} style={{ marginRight: 4 }} />
+                <Text style={styles.metaItem}>{item.birthDate}</Text>
+              </View>
             ) : null}
-            <Text style={[styles.metaItem, styles.albumCountText]}>📷 {albumCount}개의 앨범</Text>
+            <View style={styles.metaRow}>
+              <Ionicons name="camera-outline" size={13} color={COLORS.purple} style={{ marginRight: 4 }} />
+              <Text style={[styles.metaItem, styles.albumCountText]}>{albumCount}개의 앨범</Text>
+            </View>
           </View>
         </View>
 
         {/* 화살표 or 체크 여백 */}
-        {!pdfMode && <Text style={styles.chevron}>›</Text>}
+        {!pdfMode && <Ionicons name="chevron-forward" size={22} color={COLORS.textMuted} style={{ marginLeft: 8 }} />}
       </TouchableOpacity>
     </Animated.View>
   );
@@ -352,13 +362,15 @@ const styles = StyleSheet.create({
   headerSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 
-  /* PDF 텍스트 버튼 */
+  /* PDF 버튼 - AlbumDetailScreen pdfBtn과 동일한 스타일 */
   pdfIconBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     height: 36, paddingHorizontal: 14, borderRadius: 18,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.purple,
+    shadowColor: COLORS.purple, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
   },
-  pdfIconText: { fontSize: 13, fontWeight: '700', color: COLORS.text, letterSpacing: 0.5 },
+  pdfIconText: { fontSize: 13, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
 
   /* + 버튼 */
   addBtnWrap: {},
@@ -368,7 +380,7 @@ const styles = StyleSheet.create({
     shadowColor: COLORS.pink, shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
   },
-  addBtnText: { color: '#fff', fontSize: 26, fontWeight: '300', lineHeight: 30 },
+  addBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 
   /* PDF 취소 버튼 */
   cancelBtn: {
@@ -385,6 +397,9 @@ const styles = StyleSheet.create({
 
   /* PDF 안내 배너 */
   pdfBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: COLORS.purple + '18',
     paddingVertical: 10, paddingHorizontal: 20,
     borderBottomWidth: 1, borderBottomColor: COLORS.purple + '30',
@@ -421,6 +436,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   checkmark: { color: '#fff', fontSize: 14, fontWeight: '700', lineHeight: 18 },
+  metaRow: { flexDirection: 'row', alignItems: 'center' },
 
   cardLeft: { marginRight: 14, position: 'relative' },
   avatarImg: {
@@ -452,13 +468,13 @@ const styles = StyleSheet.create({
 
   /* 빈 상태 */
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
-  emptyIcon: { fontSize: 80, marginBottom: 20 },
   emptyTitle: { fontSize: 22, fontWeight: '800', color: COLORS.text, marginBottom: 12 },
   emptyDesc: {
     fontSize: 15, color: COLORS.textSecondary,
     textAlign: 'center', lineHeight: 24, marginBottom: 32,
   },
   emptyBtn: {
+    flexDirection: 'row', alignItems: 'center',
     borderRadius: 28, paddingHorizontal: 32, paddingVertical: 15,
     shadowColor: COLORS.pink, shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35, shadowRadius: 8, elevation: 6,

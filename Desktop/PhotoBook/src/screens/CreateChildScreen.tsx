@@ -4,6 +4,7 @@ import {
   ScrollView, SafeAreaView, StatusBar, Alert, Image,
   Animated, Keyboard, Modal, Platform, FlatList,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -188,7 +189,7 @@ export default function CreateChildScreen() {
               </View>
             )}
             <View style={styles.avatarEditBadge}>
-              <Text style={{ fontSize: 13 }}>📷</Text>
+              <Ionicons name="camera-outline" size={14} color={COLORS.text} />
             </View>
           </TouchableOpacity>
           <Text style={styles.previewName}>{name || '그룹명 입력'}</Text>
@@ -287,35 +288,35 @@ export default function CreateChildScreen() {
 
               <TouchableOpacity style={styles.sheetRow} onPress={() => pickPhoto(true)}>
                 <View style={[styles.sheetIconBox, { backgroundColor: '#EFF6FF' }]}>
-                  <Text style={styles.sheetIconText}>📷</Text>
+                  <Ionicons name="camera-outline" size={26} color="#3B82F6" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sheetRowTitle}>카메라로 촬영</Text>
                   <Text style={styles.sheetRowSub}>지금 바로 사진 찍기</Text>
                 </View>
-                <Text style={styles.sheetRowChevron}>›</Text>
+                <Ionicons name="chevron-forward" size={22} color={COLORS.textMuted} />
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.sheetRow} onPress={() => pickPhoto(false)}>
                 <View style={[styles.sheetIconBox, { backgroundColor: COLORS.purplePastel }]}>
-                  <Text style={styles.sheetIconText}>🖼️</Text>
+                  <Ionicons name="images-outline" size={26} color={COLORS.purple} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sheetRowTitle}>갤러리에서 선택</Text>
                   <Text style={styles.sheetRowSub}>앨범에서 사진 선택</Text>
                 </View>
-                <Text style={styles.sheetRowChevron}>›</Text>
+                <Ionicons name="chevron-forward" size={22} color={COLORS.textMuted} />
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.sheetRow} onPress={openEmojiModal}>
                 <View style={[styles.sheetIconBox, { backgroundColor: '#FFF7ED' }]}>
-                  <Text style={styles.sheetIconText}>😊</Text>
+                  <Ionicons name="happy-outline" size={26} color="#F97316" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sheetRowTitle}>이모지 선택</Text>
                   <Text style={styles.sheetRowSub}>이모지로 대표 이미지 설정</Text>
                 </View>
-                <Text style={styles.sheetRowChevron}>›</Text>
+                <Ionicons name="chevron-forward" size={22} color={COLORS.textMuted} />
               </TouchableOpacity>
 
               {photoUri && (
@@ -324,7 +325,7 @@ export default function CreateChildScreen() {
                   onPress={() => { setPhotoUri(undefined); closeSheet(setShowAvatarSheet, sheetAnim); }}
                 >
                   <View style={[styles.sheetIconBox, { backgroundColor: '#FEE2E2' }]}>
-                    <Text style={styles.sheetIconText}>🗑️</Text>
+                    <Ionicons name="trash-outline" size={26} color={COLORS.danger} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.sheetRowTitle, { color: COLORS.danger }]}>이미지 제거</Text>
@@ -435,7 +436,7 @@ export default function CreateChildScreen() {
                   <Text style={[styles.groupRowLabel, groupType === g.type && { color: COLORS.purple, fontWeight: '700' }]}>
                     {g.label}
                   </Text>
-                  {groupType === g.type && <Text style={{ color: COLORS.purple, fontWeight: '700', fontSize: 16 }}>✓</Text>}
+                  {groupType === g.type && <Ionicons name="checkmark" size={18} color={COLORS.purple} />}
                 </TouchableOpacity>
               ))}
               <View style={{ height: Platform.OS === 'ios' ? 24 : 12 }} />
@@ -538,10 +539,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB', borderRadius: 20, padding: 16, marginBottom: 12,
   },
   sheetIconBox: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  sheetIconText: { fontSize: 26 },
   sheetRowTitle: { fontSize: 15, fontWeight: '600', color: COLORS.text },
   sheetRowSub: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
-  sheetRowChevron: { fontSize: 22, color: COLORS.textMuted },
 
   /* ── 이모지 선택 시트 (더 큰 시트) ── */
   emojiSheet: {

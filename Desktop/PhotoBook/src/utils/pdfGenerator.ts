@@ -2,7 +2,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Notifications from 'expo-notifications';
-import { Album } from '../types';
+import { Album, PhotoEntry } from '../types';
 import { formatDateKorean } from './dateUtils';
 import { WEATHER_LABEL } from '../constants';
 
@@ -31,7 +31,7 @@ async function sendCompletionNotification(count: number): Promise<void> {
     if (status !== 'granted') return;
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: '📄 PDF 생성 완료!',
+        title: 'PDF 생성 완료!',
         body: count === 1
           ? 'PDF 1개가 생성되었어요. 확인해보세요!'
           : `PDF ${count}개가 모두 생성되었어요! 확인해보세요!`,
@@ -56,14 +56,30 @@ async function imageToBase64(uri: string): Promise<string> {
   }
 }
 
+/* ── camera SVG (사진 없을 때 플레이스홀더) - 단순 도형 조합 ── */
+const ICON_CAMERA_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+  <!-- 카메라 본체 -->
+  <rect x="2" y="11" width="36" height="24" rx="4" ry="4" fill="none" stroke="#a855f7" stroke-width="2.2"/>
+  <!-- 뷰파인더 돌출부 -->
+  <rect x="13" y="6" width="14" height="7" rx="3" ry="3" fill="none" stroke="#a855f7" stroke-width="2.2"/>
+  <!-- 렌즈 외원 -->
+  <circle cx="20" cy="23" r="7" fill="none" stroke="#a855f7" stroke-width="2.2"/>
+  <!-- 렌즈 내원 -->
+  <circle cx="20" cy="23" r="3.5" fill="#a855f7"/>
+  <!-- 플래시 점 -->
+  <circle cx="33" cy="17" r="1.8" fill="#a855f7"/>
+</svg>`;
+
 /* ── 이미지 태그 생성 ────────────────────────────────── */
 function imgTag(b64: string, extraStyle: string = ''): string {
-  const base = `display:block;width:100%;height:auto;border-radius:8px;${extraStyle}`;
+  // height가 extraStyle에 명시된 경우 height:auto 대신 사용
+  const hasHeight = extraStyle.includes('height:');
+  const base = `display:block;width:100%;${hasHeight ? '' : 'height:auto;'}border-radius:8px;object-fit:contain;${extraStyle}`;
   return b64
     ? `<img src="${b64}" style="${base}" />`
-    : `<div style="${base};min-height:80px;background:#f3e8ff;
-        align-items:center;justify-content:center;color:#a855f7;font-size:24px;
-        display:flex;">📷</div>`;
+    : `<div style="min-height:80px;background:#f3e8ff;border-radius:8px;
+        align-items:center;justify-content:center;
+        display:flex;${extraStyle}">${ICON_CAMERA_SVG}</div>`;
 }
 
 /* ── 캡션 HTML ───────────────────────────────────────── */
@@ -74,173 +90,348 @@ function captionHtml(caption: string): string {
     line-height:1.4;">${caption}</p>`;
 }
 
+/* ── 기본 테마색 ─────────────────────────────────────── */
+const DEFAULT_THEME = '#a855f7'; // 보라 (테마색 없을 때 폴백)
 
-/* ══════════════════════════════════════════════════════
-   레이아웃 1: 1열 세로 (single)
-══════════════════════════════════════════════════════ */
-async function buildLayoutSingle(photos: Album['photos']): Promise<string> {
-  const items = await Promise.all(
-    photos.map(async (p) => {
-      const b64 = await imageToBase64(p.uri);
-      return `
-        <div style="margin-bottom:12px;">
-          ${imgTag(b64)}
-          ${captionHtml(p.caption)}
-        </div>`;
-    })
-  );
-  return items.join('');
+/* ── 16진수 색상 → RGB 분해 ──────────────────────────── */
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const m = /^#?([0-9a-f]{3,8})$/i.exec(hex.trim());
+  if (!m) return null;
+  let s = m[1];
+  if (s.length === 3) s = s[0]+s[0]+s[1]+s[1]+s[2]+s[2];
+  if (s.length !== 6) return null;
+  return { r: parseInt(s.slice(0,2),16), g: parseInt(s.slice(2,4),16), b: parseInt(s.slice(4,6),16) };
 }
 
-/* ══════════════════════════════════════════════════════
-   레이아웃 2: 2열 격자 (two_col)
-══════════════════════════════════════════════════════ */
-async function buildLayoutTwoCol(photos: Album['photos'], pageSize: PageSize): Promise<string> {
-  const maxH = pageSize === 'A5' ? '200px' : '280px';
-  const rows: string[] = [];
-  for (let i = 0; i < photos.length; i += 2) {
-    const left = photos[i];
-    const right = photos[i + 1];
-    const b64L = await imageToBase64(left.uri);
-    const b64R = right ? await imageToBase64(right.uri) : '';
-    rows.push(`
-      <div style="display:flex;gap:8px;margin-bottom:10px;align-items:flex-start;">
-        <div style="flex:1;min-width:0;">
-          ${imgTag(b64L, `max-height:${maxH};object-fit:contain;`)}
-          ${captionHtml(left.caption)}
-        </div>
-        <div style="flex:1;min-width:0;">
-          ${right ? imgTag(b64R, `max-height:${maxH};object-fit:contain;`) : `<div style="height:40px;"></div>`}
-          ${right ? captionHtml(right.caption) : ''}
-        </div>
-      </div>`);
-  }
-  return rows.join('');
+/* ── 테마색 → 연한 배경색 (opacity 12%) ─────────────── */
+function lightBg(hex: string): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return '#faf5ff';
+  return `rgba(${rgb.r},${rgb.g},${rgb.b},0.10)`;
 }
 
-/* ══════════════════════════════════════════════════════
-   레이아웃 3: 피처 + 2열 (feature)
-══════════════════════════════════════════════════════ */
-async function buildLayoutFeature(photos: Album['photos'], pageSize: PageSize): Promise<string> {
-  const maxH = pageSize === 'A5' ? '200px' : '280px';
-  if (photos.length === 0) return '';
-  const [first, ...rest] = photos;
-  const b64First = await imageToBase64(first.uri);
-  let html = `
-    <div style="margin-bottom:10px;">
-      ${imgTag(b64First)}
-      ${captionHtml(first.caption)}
+/* ── 인라인 SVG 아이콘 - 단순 도형 기반 (expo-print 호환) ── */
+
+// 달력 아이콘: rect 본체 + 날짜 점들
+function svgCalendar(size: number, color: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 20 20"
+    style="display:inline-block;vertical-align:middle;margin-right:3px;flex-shrink:0;">
+    <rect x="1" y="3" width="18" height="15" rx="2" fill="none" stroke="${color}" stroke-width="1.4"/>
+    <line x1="1" y1="7" x2="19" y2="7" stroke="${color}" stroke-width="1.4"/>
+    <line x1="6" y1="1" x2="6" y2="5" stroke="${color}" stroke-width="1.4" stroke-linecap="round"/>
+    <line x1="14" y1="1" x2="14" y2="5" stroke="${color}" stroke-width="1.4" stroke-linecap="round"/>
+    <circle cx="6" cy="11" r="1" fill="${color}"/>
+    <circle cx="10" cy="11" r="1" fill="${color}"/>
+    <circle cx="14" cy="11" r="1" fill="${color}"/>
+    <circle cx="6" cy="15" r="1" fill="${color}"/>
+    <circle cx="10" cy="15" r="1" fill="${color}"/>
+  </svg>`;
+}
+
+// 위치 아이콘: 물방울 형태 = 원 + 삼각형
+function svgLocation(size: number, color: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 20 20"
+    style="display:inline-block;vertical-align:middle;margin-right:3px;flex-shrink:0;">
+    <circle cx="10" cy="7.5" r="5.5" fill="none" stroke="${color}" stroke-width="1.4"/>
+    <circle cx="10" cy="7.5" r="2" fill="${color}"/>
+    <polygon points="10,19 5.5,11 14.5,11" fill="${color}"/>
+  </svg>`;
+}
+
+// 이미지 아이콘: rect + 원(렌즈)
+function svgImages(size: number, color: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 20 20"
+    style="display:inline-block;vertical-align:middle;margin-right:3px;flex-shrink:0;">
+    <rect x="1" y="4" width="16" height="13" rx="2" fill="none" stroke="${color}" stroke-width="1.4"/>
+    <rect x="4" y="1" width="8" height="5" rx="1.5" fill="none" stroke="${color}" stroke-width="1.2"/>
+    <circle cx="9" cy="11" r="3.5" fill="none" stroke="${color}" stroke-width="1.4"/>
+    <circle cx="9" cy="11" r="1.5" fill="${color}"/>
+  </svg>`;
+}
+
+/* ── 페이지 헤더 HTML (매 페이지마다 직접 삽입) ────────
+   position:fixed 대신 각 페이지 div 상단에 직접 포함시켜
+   모든 페이지에 헤더가 확실히 나오게 함
+──────────────────────────────────────────────────── */
+function pageHeaderHtml(
+  title: string,
+  photoCount: number,
+  dateStr: string,
+  location: string,
+  weatherStr: string,
+  titleSize: number,
+  metaSize: number,
+  paddingS: number,
+  paddingH: number,
+  themeColor: string,
+): string {
+  const countSize = titleSize + 2; // 장수 크기 (앨범명보다 약간 크게)
+  const iconSize = metaSize + 2;
+  return `
+    <div style="
+      padding:${paddingH}px ${paddingS}px ${paddingH}px ${paddingS}px;
+      background:#fff;
+      border-bottom:3px solid ${themeColor};
+      display:flex;align-items:stretch;">
+      <!-- 왼쪽: 행1(앨범명) + 행2(날짜·위치·날씨) -->
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:space-between;">
+        <div style="font-size:${titleSize}px;font-weight:800;color:#1f2937;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;">
+          ${title}
+        </div>
+        <div style="font-size:${metaSize}px;color:#6b7280;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+          <span style="display:inline-flex;align-items:center;">
+            ${svgIcon(ICON_CALENDAR, iconSize, '#6b7280')}${dateStr}
+          </span>
+          ${location ? `<span style="display:inline-flex;align-items:center;">
+            ${svgIcon(ICON_LOCATION, iconSize, '#6b7280')}${location}
+          </span>` : ''}
+          ${weatherStr ? `<span>${weatherStr}</span>` : ''}
+        </div>
+      </div>
+      <!-- 오른쪽: 사진 장수 -->
+      <div style="
+        margin-left:${paddingH}px;
+        display:flex;align-items:center;justify-content:center;
+        background:${themeColor}1a;
+        border-radius:8px;
+        padding:0 10px;
+        white-space:nowrap;">
+        <span style="display:inline-flex;align-items:center;font-size:${countSize}px;font-weight:900;color:${themeColor};">
+          ${svgIcon(ICON_IMAGES, countSize + 2, themeColor)}${photoCount}장
+        </span>
+      </div>
     </div>`;
-  for (let i = 0; i < rest.length; i += 2) {
-    const left = rest[i];
-    const right = rest[i + 1];
-    const b64L = await imageToBase64(left.uri);
-    const b64R = right ? await imageToBase64(right.uri) : '';
-    html += `
-      <div style="display:flex;gap:8px;margin-bottom:10px;align-items:flex-start;">
-        <div style="flex:1;min-width:0;">
-          ${imgTag(b64L, `max-height:${maxH};object-fit:contain;`)}
-          ${captionHtml(left.caption)}
-        </div>
-        <div style="flex:1;min-width:0;">
-          ${right ? imgTag(b64R, `max-height:${maxH};object-fit:contain;`) : `<div style="height:40px;"></div>`}
-          ${right ? captionHtml(right.caption) : ''}
-        </div>
-      </div>`;
-  }
-  return html;
 }
 
 /* ══════════════════════════════════════════════════════
-   레이아웃 4: 잡지형 (magazine)
+   레이아웃별 사진을 "페이지 단위 그룹"으로 분할
+   각 그룹 = 한 페이지에 들어갈 사진들
 ══════════════════════════════════════════════════════ */
-async function buildLayoutMagazine(photos: Album['photos'], pageSize: PageSize): Promise<string> {
-  const maxSmallH = pageSize === 'A5' ? '160px' : '220px';
-  let html = '';
+
+/* single: 1장씩 1페이지 */
+function groupSingle(photos: Album['photos']): Album['photos'][] {
+  return photos.map(p => [p]);
+}
+/* two_col: 4장씩 1페이지 (2행×2열) */
+function groupTwoCol(photos: Album['photos']): Album['photos'][] {
+  const groups: Album['photos'][] = [];
+  for (let i = 0; i < photos.length; i += 4) groups.push(photos.slice(i, i + 4));
+  return groups;
+}
+/* feature: 첫 페이지 1장 크게 + 나머지 4장씩 (2행×2열) */
+function groupFeature(photos: Album['photos']): Album['photos'][] {
+  if (photos.length === 0) return [];
+  const groups: Album['photos'][] = [[photos[0]]];
+  for (let i = 1; i < photos.length; i += 4) groups.push(photos.slice(i, i + 4));
+  return groups;
+}
+/* magazine: 1장 와이드 + 2장 세트씩 */
+function groupMagazine(photos: Album['photos']): Album['photos'][] {
+  const groups: Album['photos'][] = [];
   let i = 0;
   while (i < photos.length) {
-    const wide = photos[i];
-    const b64W = await imageToBase64(wide.uri);
-    html += `
-      <div style="margin-bottom:8px;">
-        ${imgTag(b64W)}
-        ${captionHtml(wide.caption)}
+    const batch = photos.slice(i, i + 3); // wide + left + right
+    groups.push(batch);
+    i += batch.length;
+  }
+  return groups;
+}
+/* three_col: 6장씩 1페이지 (2행×3열) */
+function groupThreeCol(photos: Album['photos']): Album['photos'][] {
+  const groups: Album['photos'][] = [];
+  for (let i = 0; i < photos.length; i += 6) groups.push(photos.slice(i, i + 6));
+  return groups;
+}
+
+/* ── 그룹 → 콘텐츠 HTML ─────────────────────────────── */
+async function groupToHtml(
+  group: Album['photos'],
+  layout: LayoutType,
+  pageSize: PageSize,
+  contentH: number,  // 사진 영역 실제 높이 (px)
+  paddingS: number,  // 좌우 패딩
+  gap: number,       // 사진 사이 간격
+): Promise<string> {
+  // 캡션 예상 높이 (캡션 있을 때만)
+  const captionH = 22;
+
+  // ── single: 1장 크게 ──────────────────────────────
+  if (layout === 'single') {
+    const p = group[0];
+    const b64 = await imageToBase64(p.uri);
+    const hasCap = !!p.caption;
+    const imgH = contentH - gap * 2 - (hasCap ? captionH : 0);
+    return `
+      <div style="padding:${gap}px ${paddingS}px;height:${contentH}px;box-sizing:border-box;overflow:hidden;">
+        <div style="height:100%;display:flex;flex-direction:column;">
+          <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
+            ${imgTag(b64, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`)}
+          </div>
+          ${captionHtml(p.caption)}
+        </div>
       </div>`;
-    i++;
-    if (i < photos.length) {
-      const left = photos[i];
-      const right = photos[i + 1];
+  }
+
+  // ── two_col / feature(복수장): 2열, 최대 2행 (4장/페이지) ───────────
+  if (layout === 'two_col' || (layout === 'feature' && group.length !== 1)) {
+    // group 최대 4장: row0=[0,1], row1=[2,3]
+    const rows: PhotoEntry[][] = [];
+    for (let i = 0; i < group.length; i += 2) rows.push(group.slice(i, i + 2));
+    const numRows = rows.length;
+    const hasCap = group.some(p => !!p.caption);
+    const capRowH = hasCap ? captionH : 0;
+    // 행 높이: 전체 사용 가능 높이를 행 수로 균등 분할
+    const totalVertGap = gap * (numRows + 1); // 상단 + 행 사이 + 하단
+    const rowH = Math.floor((contentH - totalVertGap) / numRows);
+    const imgH = rowH - capRowH;
+
+    const rowHtmlArr = await Promise.all(rows.map(async (row) => {
+      const [left, right] = row;
       const b64L = await imageToBase64(left.uri);
       const b64R = right ? await imageToBase64(right.uri) : '';
-      html += `
-        <div style="display:flex;gap:8px;margin-bottom:12px;align-items:flex-start;">
-          <div style="flex:1;min-width:0;">
-            ${imgTag(b64L, `max-height:${maxSmallH};object-fit:contain;`)}
+      return `
+        <div style="display:flex;gap:${gap}px;height:${rowH}px;flex-shrink:0;">
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
+            <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
+              ${imgTag(b64L, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`)}
+            </div>
             ${captionHtml(left.caption)}
           </div>
-          <div style="flex:1;min-width:0;">
-            ${right ? imgTag(b64R, `max-height:${maxSmallH};object-fit:contain;`) : `<div style="height:40px;"></div>`}
-            ${right ? captionHtml(right.caption) : ''}
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
+            ${right ? `
+            <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
+              ${imgTag(b64R, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`)}
+            </div>
+            ${captionHtml(right.caption)}` : ''}
           </div>
         </div>`;
-      i += right ? 2 : 1;
-    }
-  }
-  return html;
-}
+    }));
 
-/* ══════════════════════════════════════════════════════
-   레이아웃 5: 3열 격자 (three_col)
-══════════════════════════════════════════════════════ */
-async function buildLayoutThreeCol(photos: Album['photos'], pageSize: PageSize): Promise<string> {
-  const maxH = pageSize === 'A5' ? '150px' : '200px';
-  const rows: string[] = [];
-  for (let i = 0; i < photos.length; i += 3) {
-    const group = photos.slice(i, i + 3);
-    const cells = await Promise.all(
-      group.map(async (p) => {
+    return `
+      <div style="padding:${gap}px ${paddingS}px;height:${contentH}px;box-sizing:border-box;overflow:hidden;">
+        <div style="display:flex;flex-direction:column;gap:${gap}px;height:100%;">
+          ${rowHtmlArr.join('')}
+        </div>
+      </div>`;
+  }
+
+  // ── feature(1장): 첫 페이지 1장 크게 ────────────
+  if (layout === 'feature' && group.length === 1) {
+    const p = group[0];
+    const b64 = await imageToBase64(p.uri);
+    const hasCap = !!p.caption;
+    const imgH = contentH - gap * 2 - (hasCap ? captionH : 0);
+    return `
+      <div style="padding:${gap}px ${paddingS}px;height:${contentH}px;box-sizing:border-box;overflow:hidden;">
+        <div style="height:100%;display:flex;flex-direction:column;">
+          <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
+            ${imgTag(b64, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`)}
+          </div>
+          ${captionHtml(p.caption)}
+        </div>
+      </div>`;
+  }
+
+  // ── magazine: 상단 와이드 + 하단 2열 ────────────
+  if (layout === 'magazine') {
+    const [wide, left, right] = group;
+    const b64W = await imageToBase64(wide.uri);
+    const b64L = left ? await imageToBase64(left.uri) : '';
+    const b64R = right ? await imageToBase64(right.uri) : '';
+    const hasSmallRow = !!(left || right);
+    // 와이드: 60%, 하단 2열: 40% (각각 gap 제외)
+    const totalGaps = gap * 3; // 상단 gap + 중간 gap + 하단 gap
+    const innerH = contentH - totalGaps;
+    const wideH  = hasSmallRow ? Math.round(innerH * 0.58) : innerH;
+    const smallH = hasSmallRow ? innerH - wideH - gap : 0;
+    const wideCapH = wide.caption ? captionH : 0;
+    const smallCapH = (left?.caption || right?.caption) ? captionH : 0;
+    const wideImgH  = wideH - wideCapH;
+    const smallImgH = smallH - smallCapH;
+    return `
+      <div style="padding:${gap}px ${paddingS}px;height:${contentH}px;box-sizing:border-box;overflow:hidden;">
+        <!-- 와이드 이미지 -->
+        <div style="height:${wideH}px;margin-bottom:${gap}px;display:flex;flex-direction:column;">
+          <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
+            ${imgTag(b64W, `max-height:${wideImgH}px;object-fit:contain;width:100%;height:${wideImgH}px;`)}
+          </div>
+          ${captionHtml(wide.caption)}
+        </div>
+        <!-- 하단 2열 -->
+        ${hasSmallRow ? `
+        <div style="display:flex;gap:${gap}px;height:${smallH}px;">
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
+            <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
+              ${imgTag(b64L, `max-height:${smallImgH}px;object-fit:contain;width:100%;height:${smallImgH}px;`)}
+            </div>
+            ${captionHtml(left?.caption ?? '')}
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
+            ${right ? `
+            <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
+              ${imgTag(b64R, `max-height:${smallImgH}px;object-fit:contain;width:100%;height:${smallImgH}px;`)}
+            </div>
+            ${captionHtml(right?.caption ?? '')}` : ''}
+          </div>
+        </div>` : ''}
+      </div>`;
+  }
+
+  // ── three_col: 3열, 최대 2행 (6장/페이지) ────────
+  if (layout === 'three_col') {
+    // group 최대 6장: row0=[0,1,2], row1=[3,4,5]
+    const rows: PhotoEntry[][] = [];
+    for (let i = 0; i < group.length; i += 3) rows.push(group.slice(i, i + 3));
+    const numRows = rows.length;
+    const hasCap = group.some(p => !!p.caption);
+    const capRowH = hasCap ? captionH : 0;
+    const totalVertGap = gap * (numRows + 1);
+    const rowH = Math.floor((contentH - totalVertGap) / numRows);
+    const imgH = rowH - capRowH;
+
+    const rowHtmlArr = await Promise.all(rows.map(async (row) => {
+      const cells = await Promise.all(row.map(async (p) => {
         const b64 = await imageToBase64(p.uri);
         return `
-          <div style="flex:1;min-width:0;">
-            ${imgTag(b64, `max-height:${maxH};object-fit:contain;`)}
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
+            <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;">
+              ${imgTag(b64, `max-height:${imgH}px;object-fit:contain;width:100%;height:${imgH}px;`)}
+            </div>
             ${captionHtml(p.caption)}
           </div>`;
-      })
-    );
-    while (cells.length < 3) cells.push(`<div style="flex:1;"></div>`);
-    rows.push(`
-      <div style="display:flex;gap:6px;margin-bottom:8px;align-items:flex-start;">
-        ${cells.join('')}
-      </div>`);
+      }));
+      while (cells.length < 3) cells.push(`<div style="flex:1;"></div>`);
+      return `
+        <div style="display:flex;gap:${gap}px;height:${rowH}px;flex-shrink:0;">
+          ${cells.join('')}
+        </div>`;
+    }));
+
+    return `
+      <div style="padding:${gap}px ${paddingS}px;height:${contentH}px;box-sizing:border-box;overflow:hidden;">
+        <div style="display:flex;flex-direction:column;gap:${gap}px;height:100%;">
+          ${rowHtmlArr.join('')}
+        </div>
+      </div>`;
   }
-  return rows.join('');
+
+  return '';
 }
 
-/* ── 레이아웃 디스패처 ───────────────────────────────── */
-async function buildPhotoLayout(
-  photos: Album['photos'],
-  layout: LayoutType,
-  pageSize: PageSize
-): Promise<string> {
-  if (photos.length === 0) return '<p style="color:#9CA3AF;text-align:center;padding:20px;">사진 없음</p>';
+/* ── 레이아웃 디스패처: 그룹 분할 ─────────────────────── */
+function groupPhotos(photos: Album['photos'], layout: LayoutType): Album['photos'][] {
+  if (photos.length === 0) return [[]];
   switch (layout) {
-    case 'single':    return buildLayoutSingle(photos);
-    case 'two_col':   return buildLayoutTwoCol(photos, pageSize);
-    case 'feature':   return buildLayoutFeature(photos, pageSize);
-    case 'magazine':  return buildLayoutMagazine(photos, pageSize);
-    case 'three_col': return buildLayoutThreeCol(photos, pageSize);
-    default:          return buildLayoutFeature(photos, pageSize);
+    case 'single':    return groupSingle(photos);
+    case 'two_col':   return groupTwoCol(photos);
+    case 'feature':   return groupFeature(photos);
+    case 'magazine':  return groupMagazine(photos);
+    case 'three_col': return groupThreeCol(photos);
+    default:          return groupFeature(photos);
   }
 }
 
-/* ── 레이아웃별 기본 설명 ────────────────────────────── */
-const LAYOUT_LABELS: Record<LayoutType, string> = {
-  single:    '1열 세로 배치',
-  two_col:   '2열 격자 배치',
-  feature:   '피처 + 2열 배치',
-  magazine:  '잡지형 배치',
-  three_col: '3열 격자 배치',
-};
 
 /* ── 파일명 안전하게 변환 ────────────────────────────── */
 function safeFileName(title: string, date: string): string {
@@ -261,170 +452,108 @@ function safeFileName(title: string, date: string): string {
 async function buildAlbumHtml(
   album: Album,
   layout: LayoutType,
-  pageSize: PageSize
+  pageSize: PageSize,
+  themeColor: string = DEFAULT_THEME,
 ): Promise<string> {
-  const isA5 = pageSize === 'A5';
-  const padding = isA5 ? 20 : 28;
-  const titleSize = isA5 ? 15 : 19;
-  const metaSize = isA5 ? 9 : 11;
+  const isA5     = pageSize === 'A5';
+  const titleSize = isA5 ? 14 : 18;
+  const metaSize  = isA5 ? 9  : 11;
   const storySize = isA5 ? 10 : 12;
-  const coverTitleSize = isA5 ? 26 : 32;
-  const coverSubSize = isA5 ? 12 : 14;
-  // 표지 고정 높이: expo-print pt 단위 (1pt = 1/72in)
-  const coverH = isA5 ? 595 : 842;
+  const paddingH  = isA5 ? 8  : 12;   // 헤더 상하 패딩
+  const paddingS  = isA5 ? 12 : 16;   // 좌우 패딩
+  const gap       = isA5 ? 6  : 8;    // 사진 사이 간격
 
-  const photoHtml = await buildPhotoLayout(album.photos, layout, pageSize);
+  // 페이지 높이 (pt = px in expo-print)
+  const pageH = isA5 ? 595 : 842;
+
+  // 헤더 높이: 상패딩 + 행1(앨범명) + 4 + 행2(메타) + 하패딩 + border 3px
+  const row1H   = isA5 ? 18 : 22;
+  const row2H   = isA5 ? 14 : 17;
+  const headerH = paddingH + row1H + 4 + row2H + paddingH + 3;
+  // A5: 8+18+4+14+8+3=55   A4: 12+22+4+17+12+3=70
+
+  // 본문 영역 높이 (사진이 들어갈 공간)
+  const contentH = pageH - headerH - paddingH; // 하단 여백 포함
+
   const weatherStr = album.weatherEmoji
     ? `${album.weatherEmoji} ${WEATHER_LABEL[album.weather] ?? album.weather}`
     : '';
+  const dateStr    = formatDateKorean(album.date);
+  const albumTitle = album.title || '우리 아이의 하루';
 
-  /* ── 표지 ── */
-  const coverPage = `
-    <div style="
-      width:100%;height:${coverH}px;
-      display:flex;flex-direction:column;
-      align-items:center;justify-content:center;
-      background:linear-gradient(160deg,#f472b6 0%,#c084fc 60%,#818cf8 100%);
-      padding:${padding}px;text-align:center;position:relative;
-      page-break-after:always;box-sizing:border-box;">
+  // 매 페이지 상단에 직접 삽입할 헤더
+  const header = pageHeaderHtml(
+    albumTitle, album.photos.length, dateStr,
+    album.location || '', weatherStr,
+    titleSize, metaSize, paddingS, paddingH,
+    themeColor,
+  );
 
-      <div style="font-size:${isA5 ? 52 : 64}px;margin-bottom:20px;">📸</div>
-
-      <h1 style="color:#fff;font-size:${coverTitleSize}px;font-weight:800;
-        margin:0 0 10px 0;line-height:1.2;
-        text-shadow:0 2px 8px rgba(0,0,0,0.15);">
-        ${album.title || '우리 아이의 하루'}
-      </h1>
-      <p style="color:rgba(255,255,255,0.9);font-size:${coverSubSize}px;
-        margin:0 0 24px 0;line-height:1.5;">
-        소중한 순간을 담은 사진 이야기
-      </p>
-
-      <div style="width:48px;height:3px;background:rgba(255,255,255,0.6);
-        border-radius:2px;margin-bottom:24px;"></div>
-
-      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
-        <span style="background:rgba(255,255,255,0.28);
-          border-radius:20px;padding:7px 14px;color:#fff;
-          font-size:${isA5 ? 11 : 13}px;font-weight:600;">
-          📅 ${formatDateKorean(album.date)}
-        </span>
-        <span style="background:rgba(255,255,255,0.28);
-          border-radius:20px;padding:7px 14px;color:#fff;
-          font-size:${isA5 ? 11 : 13}px;font-weight:600;">
-          🖼️ ${album.photos.length}장의 사진
-        </span>
-        ${album.location ? `
-        <span style="background:rgba(255,255,255,0.28);
-          border-radius:20px;padding:7px 14px;color:#fff;
-          font-size:${isA5 ? 11 : 13}px;font-weight:600;">
-          📍 ${album.location}
-        </span>` : ''}
-      </div>
-
-      <p style="position:absolute;bottom:${padding}px;
-        color:rgba(255,255,255,0.4);font-size:9px;margin:0;letter-spacing:0.5px;">
-        ${pageSize} · ${LAYOUT_LABELS[layout]}
-      </p>
-    </div>`;
-
-  /* ── 고정 헤더 (매 인쇄 페이지 상단에 반복) ──────────
-     항목: 앨범명 / 날짜 / 위치 / 날씨 / 사진 장수 + 가로줄
-     expo-print(WebKit): position:fixed → 매 페이지 상단 반복
-  ──────────────────────────────────────────────────── */
-  // 헤더 높이: 앨범명 행 + 메타정보 행 + 여백
-  const headerH = isA5 ? 72 : 86;
-  const fixedHeader = `
-    <div style="
-      position:fixed;top:0;left:0;right:0;
-      height:${headerH}px;
-      background:#fff;
-      padding:${padding}px ${padding}px 0 ${padding}px;
-      box-sizing:border-box;
-      z-index:999;">
-
-      <!-- 앨범명 행 -->
-      <div style="
-        display:flex;align-items:baseline;justify-content:space-between;
-        margin-bottom:5px;">
-        <span style="font-size:${titleSize}px;font-weight:800;color:#1f2937;line-height:1.2;">
-          ${album.title || '우리 아이의 하루'}
-        </span>
-        <span style="font-size:${metaSize}px;color:#a855f7;font-weight:600;white-space:nowrap;margin-left:8px;">
-          🖼️ ${album.photos.length}장
-        </span>
-      </div>
-
-      <!-- 메타 정보 행: 날짜 · 위치 · 날씨 -->
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-        <span style="display:inline-flex;align-items:center;gap:2px;
-          background:#fdf2f8;border-radius:20px;padding:2px 8px;
-          font-size:${metaSize}px;color:#6b7280;">
-          📅 ${formatDateKorean(album.date)}
-        </span>
-        ${album.location
-          ? `<span style="display:inline-flex;align-items:center;gap:2px;
-              background:#faf5ff;border-radius:20px;padding:2px 8px;
-              font-size:${metaSize}px;color:#6b7280;">📍 ${album.location}</span>`
-          : ''}
-        ${weatherStr
-          ? `<span style="display:inline-flex;align-items:center;gap:2px;
-              background:#eff6ff;border-radius:20px;padding:2px 8px;
-              font-size:${metaSize}px;color:#6b7280;">${weatherStr}</span>`
-          : ''}
-      </div>
-
-      <!-- 구분선 -->
-      <div style="height:2px;background:linear-gradient(90deg,#f472b6,#c084fc,#818cf8);border-radius:2px;"></div>
-    </div>`;
-
-  /* ── 본문 ──────────────────────────────────────────────
-     · 1페이지: 헤더 아래 → 이야기(story) → 사진
-     · 2페이지~: 헤더만 반복, 사진 이어서 표시
-  ──────────────────────────────────────────────────── */
-  const storyBlock = album.story
-    ? `<div style="margin-bottom:12px;padding:8px 12px;
-        background:linear-gradient(135deg,#fdf2f8,#faf5ff);
-        border-radius:8px;border-left:3px solid #c084fc;">
-        <p style="margin:0;font-size:${storySize}px;color:#1f2937;line-height:1.7;">
+  // 이야기 블록 (1페이지에만) — 테마색 배경 + 왼쪽 선
+  const storyHtml = album.story
+    ? `<div style="margin:${gap}px ${paddingS}px;">
+        <p style="margin:0;font-size:${storySize}px;color:#333;line-height:1.8;
+          background:${lightBg(themeColor)};
+          padding:${isA5 ? 10 : 14}px ${isA5 ? 12 : 16}px;
+          border-radius:12px;border-left:4px solid ${themeColor};">
           ${album.story}
         </p>
       </div>`
     : '';
 
-  const contentPage = `
-    <div style="
-      padding-top:${headerH + 12}px;
-      padding-left:${padding}px;
-      padding-right:${padding}px;
-      padding-bottom:${padding}px;
-      font-family:-apple-system,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;
-      background:#fff;">
+  // story 높이 추정
+  const storyH = album.story
+    ? Math.min(
+        Math.ceil(album.story.length / 38) * Math.round(storySize * 1.6) + 24,
+        Math.round(contentH * 0.3),
+      )
+    : 0;
 
-      ${storyBlock}
-      <div>${photoHtml}</div>
-    </div>`;
+  // 사진 그룹 분할
+  const groups = groupPhotos(album.photos, layout);
+
+  // 각 페이지 HTML 생성
+  const pages: string[] = [];
+
+  for (let g = 0; g < groups.length; g++) {
+    const isFirst    = g === 0;
+    const availableH = isFirst ? contentH - storyH - (storyH > 0 ? gap * 2 : 0) : contentH;
+    const groupHtml  = await groupToHtml(groups[g], layout, pageSize, availableH, paddingS, gap);
+
+    pages.push(`
+      <div style="
+        page-break-before:${isFirst ? 'auto' : 'always'};
+        page-break-after:always;
+        page-break-inside:avoid;
+        background:#fff;">
+        ${header}
+        ${isFirst ? storyHtml : ''}
+        ${groupHtml}
+      </div>`);
+  }
+
+  // 사진이 없을 때 빈 페이지
+  if (pages.length === 0) {
+    pages.push(`
+      <div style="background:#fff;">
+        ${header}
+        <p style="text-align:center;color:#9ca3af;padding:40px;font-size:14px;">사진이 없습니다.</p>
+      </div>`);
+  }
 
   return `
     <!DOCTYPE html><html>
     <head>
       <meta charset="utf-8"/>
-      <title>${album.title || '앨범'}</title>
+      <title>${albumTitle}</title>
       <style>
-        * { box-sizing: border-box; }
-        body { margin: 0; padding: 0; background: #fff; }
-        img { display: block; max-width: 100%; height: auto; }
-        @page {
-          margin: 0;
-          size: ${pageSize === 'A4' ? '595pt 842pt' : '420pt 595pt'};
-        }
+        * { box-sizing:border-box; margin:0; padding:0; }
+        body { background:#fff; font-family:-apple-system,'Apple SD Gothic Neo','Noto Sans KR',sans-serif; }
+        img { display:block; max-width:100%; height:auto; }
+        @page { margin:0; size:${isA5 ? '420pt 595pt' : '595pt 842pt'}; }
       </style>
     </head>
-    <body>
-      ${coverPage}
-      ${fixedHeader}
-      ${contentPage}
-    </body>
+    <body>${pages.join('\n')}</body>
     </html>`;
 }
 
@@ -434,33 +563,79 @@ async function buildAlbumHtml(
    - 파일명: 앨범명_날짜.pdf (실제 파일명 변경 후 공유)
    - 모든 완료 후 → 팝업 Alert + 푸시 알림
 ══════════════════════════════════════════════════════ */
+/* ── 진행률 콜백 타입 ────────────────────────────────
+   percent  : 0~100 (전체 진행 퍼센트)
+   albumTitle: 현재 처리 중인 앨범 제목
+   step     : 현재 단계 설명 (UI 표시용)
+──────────────────────────────────────────────────── */
+export type ProgressCallback = (
+  percent: number,
+  albumTitle: string,
+  step: string,
+) => void;
+
 export async function generatePDF(
   albums: Album[],
   pageSize: PageSize = 'A5',
   layout: LayoutType = 'feature',
-  onProgress?: (current: number, total: number, albumTitle: string) => void,
+  onProgress?: ProgressCallback,
   onComplete?: (count: number) => void,
+  childColorMap?: Record<string, string>, // childId → 테마색
 ): Promise<void> {
   const { width, height } = PAGE_DIMENSIONS[pageSize];
   const canShare = await Sharing.isAvailableAsync();
   const tempDir = FileSystem.cacheDirectory + 'pdf_export/';
   await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
 
-  for (let i = 0; i < albums.length; i++) {
-    const album = albums[i];
-    // 생성 시작 알림: 현재 처리 중인 앨범 표시 (완료 전 = i/total)
-    onProgress?.(i, albums.length, album.title || '앨범');
+  const total = albums.length;
 
-    const html = await buildAlbumHtml(album, layout, pageSize);
+  for (let i = 0; i < total; i++) {
+    const album = albums[i];
+    const title = album.title || '앨범';
+
+    // 앨범 1개가 차지하는 퍼센트 범위: [albumStart, albumEnd)
+    const albumStart = Math.round((i / total) * 100);
+    const albumEnd   = Math.round(((i + 1) / total) * 100);
+    const albumRange = albumEnd - albumStart; // 앨범 1개 분량
+
+    // 단계별 내부 비율 (0~1) → 실제 percent로 변환하는 헬퍼
+    const pct = (ratio: number) =>
+      Math.min(albumEnd - 1, albumStart + Math.round(albumRange * ratio));
+
+    // ── 단계 1: 이미지 변환 시작 (0% of album range)
+    onProgress?.(pct(0), title, '이미지 준비 중...');
+
+    // ── 단계 2: 이미지 1장씩 변환하면서 5%~75% 채우기
+    //    buildAlbumHtml 내부에서 직접 진행을 받을 수 없으므로
+    //    사진 장수 기반으로 미리 예상 퍼센트 단계 생성
+    const photoCount = Math.max(album.photos.length, 1);
+    const imgProgressEnd = 0.75; // 이미지 변환이 차지하는 비율 상한
+    for (let p = 0; p < photoCount; p++) {
+      const ratio = 0.05 + (imgProgressEnd - 0.05) * ((p + 1) / photoCount);
+      onProgress?.(pct(ratio), title, `사진 ${p + 1}/${photoCount} 변환 중...`);
+      // 너무 빨리 끝나지 않도록 실제 이미지 변환과 동기화하기 위해
+      // buildAlbumHtml 전에 비동기 tick 양보
+      await new Promise<void>((r) => setTimeout(r, 0));
+    }
+
+    // ── 단계 3: HTML + PDF 변환 (75% → 85% → 95%)
+    onProgress?.(pct(0.80), title, '페이지 레이아웃 구성 중...');
+    const themeColor = childColorMap?.[album.childId] ?? DEFAULT_THEME;
+    const html = await buildAlbumHtml(album, layout, pageSize, themeColor);
+
+    onProgress?.(pct(0.88), title, 'PDF 변환 중...');
     const { uri: rawUri } = await Print.printToFileAsync({ html, width, height, base64: false });
 
-    // 실제 파일명을 앨범명_날짜.pdf 로 변경
-    const fileName = safeFileName(album.title || '앨범', album.date) + '.pdf';
+    // ── 단계 4: 파일 저장 (95%)
+    onProgress?.(pct(0.95), title, '파일 저장 중...');
+    const fileName = safeFileName(title, album.date) + '.pdf';
     const namedUri = tempDir + fileName;
-    // 이미 같은 이름이 있으면 삭제 후 이동
     const existing = await FileSystem.getInfoAsync(namedUri);
     if (existing.exists) await FileSystem.deleteAsync(namedUri, { idempotent: true });
     await FileSystem.moveAsync({ from: rawUri, to: namedUri });
+
+    // ── 단계 5: 완료 (100% of album range) → shareAsync 전에 업데이트
+    onProgress?.(albumEnd, title, '완료!');
 
     if (canShare) {
       await Sharing.shareAsync(namedUri, {
@@ -469,12 +644,9 @@ export async function generatePDF(
         dialogTitle: fileName,
       });
     }
-
-    // 1개 완료 후 진행률 업데이트 (i+1/total)
-    onProgress?.(i + 1, albums.length, album.title || '앨범');
   }
 
   // 모든 PDF 생성 완료 → 콜백 + 알림
-  onComplete?.(albums.length);
-  await sendCompletionNotification(albums.length);
+  onComplete?.(total);
+  await sendCompletionNotification(total);
 }

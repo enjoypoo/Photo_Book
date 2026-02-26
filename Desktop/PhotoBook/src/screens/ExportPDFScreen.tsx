@@ -3,13 +3,14 @@ import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
   Image, Alert, ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TAB_BAR_HEIGHT } from '../../App';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Album, RootStackParamList } from '../types';
-import { loadAlbums } from '../store/albumStore';
-import { generatePDF, requestNotificationPermission, PageSize, LayoutType } from '../utils/pdfGenerator';
+import { Album, Child, RootStackParamList } from '../types';
+import { loadAlbums, loadChildren } from '../store/albumStore';
+import { generatePDF, requestNotificationPermission, PageSize, LayoutType, ProgressCallback } from '../utils/pdfGenerator';
 import { COLORS, WEATHER_LABEL } from '../constants';
 import { formatDateKorean } from '../utils/dateUtils';
 
@@ -65,9 +66,10 @@ export default function ExportPDFScreen() {
   const insets = useSafeAreaInsets();
 
   const [albums, setAlbums] = useState<Album[]>([]);
+  const [childColorMap, setChildColorMap] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set(preselectedIds));
   const [generating, setGenerating] = useState(false);
-  const [progress, setProgress] = useState<{ current: number; total: number; albumTitle: string } | null>(null);
+  const [progress, setProgress] = useState<{ percent: number; albumTitle: string; step: string } | null>(null);
   const [pageSize, setPageSize] = useState<PageSize>('A5');
   const [layout, setLayout] = useState<LayoutType>('feature');
   // 선택 진입 시: 선택된 앨범만 표시 / false면 전체 표시
@@ -79,6 +81,11 @@ export default function ExportPDFScreen() {
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       );
       setAlbums(sorted);
+    });
+    loadChildren().then((children) => {
+      const map: Record<string, string> = {};
+      children.forEach((c) => { if (c.color) map[c.id] = c.color; });
+      setChildColorMap(map);
     });
     // 알림 권한 미리 요청
     requestNotificationPermission();
@@ -117,15 +124,15 @@ export default function ExportPDFScreen() {
         sorted,
         pageSize,
         layout,
-        (current, total, albumTitle) => {
-          setProgress({ current, total, albumTitle });
+        (percent, albumTitle, step) => {
+          setProgress({ percent, albumTitle, step });
         },
         (count) => {
           // 모든 PDF 완료 → 팝업 + 확인 누르면 이전 화면으로
           setGenerating(false);
           setProgress(null);
           Alert.alert(
-            '✅ PDF 생성 완료!',
+            'PDF 생성 완료!',
             count === 1
               ? 'PDF 1개가 생성되었어요!'
               : `PDF ${count}개가 모두 생성되었어요!`,
@@ -135,7 +142,8 @@ export default function ExportPDFScreen() {
               onPress: () => navigation.goBack(),
             }]
           );
-        }
+        },
+        childColorMap,
       );
     } catch (e) {
       Alert.alert('오류', 'PDF 생성 중 문제가 발생했습니다.');
@@ -152,9 +160,12 @@ export default function ExportPDFScreen() {
       {/* 헤더 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
+          <Ionicons name="arrow-back-outline" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>📄 PDF 내보내기</Text>
+        <View style={styles.headerTitleRow}>
+          <Ionicons name="document-text-outline" size={18} color={COLORS.text} style={{ marginRight: 6 }} />
+          <Text style={styles.headerTitle}>PDF 내보내기</Text>
+        </View>
         {showSelectedOnly ? (
           /* 선택된 앨범만 보기 모드: 앨범 추가 버튼 */
           <TouchableOpacity onPress={() => setShowSelectedOnly(false)}>
@@ -179,7 +190,10 @@ export default function ExportPDFScreen() {
           <>
             {/* ── 용지 크기 선택 ── */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📐 용지 크기</Text>
+              <View style={styles.sectionTitleRow}>
+                <Ionicons name="resize-outline" size={14} color={COLORS.text} style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTitle}>용지 크기</Text>
+              </View>
               <View style={styles.pageSizeRow}>
                 {PAGE_SIZES.map((ps) => (
                   <TouchableOpacity
@@ -211,7 +225,10 @@ export default function ExportPDFScreen() {
 
             {/* ── 레이아웃 선택 ── */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🖼️ 사진 배치 레이아웃</Text>
+              <View style={styles.sectionTitleRow}>
+                <Ionicons name="images-outline" size={14} color={COLORS.text} style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTitle}>사진 배치 레이아웃</Text>
+              </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.layoutScroll}>
                 {LAYOUTS.map((lt) => (
                   <TouchableOpacity
@@ -239,9 +256,12 @@ export default function ExportPDFScreen() {
 
             {/* 앨범 섹션 헤더 */}
             <View style={styles.albumSectionHeader}>
-              <Text style={styles.sectionTitle}>
-                {showSelectedOnly ? `📚 선택된 앨범 (${selected.size}개)` : `📚 전체 앨범 (${albums.length}개)`}
-              </Text>
+              <View style={styles.sectionTitleRow}>
+                <Ionicons name="book-outline" size={14} color={COLORS.text} style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTitle}>
+                  {showSelectedOnly ? `선택된 앨범 (${selected.size}개)` : `전체 앨범 (${albums.length}개)`}
+                </Text>
+              </View>
               {!showSelectedOnly && selected.size > 0 && (
                 <TouchableOpacity
                   onPress={() => setShowSelectedOnly(true)}
@@ -267,7 +287,7 @@ export default function ExportPDFScreen() {
             >
               {/* 체크 */}
               <View style={[styles.checkCircle, isSelected && styles.checkCircleSelected]}>
-                {isSelected && <Text style={styles.checkMark}>✓</Text>}
+                {isSelected && <Ionicons name="checkmark" size={16} color="#fff" />}
               </View>
 
               {/* 썸네일 */}
@@ -275,28 +295,40 @@ export default function ExportPDFScreen() {
                 <Image source={{ uri: cover.uri }} style={styles.thumb} />
               ) : (
                 <View style={[styles.thumb, styles.thumbPlaceholder]}>
-                  <Text style={{ fontSize: 24 }}>📷</Text>
+                  <Ionicons name="camera-outline" size={24} color={COLORS.textMuted} />
                 </View>
               )}
 
               {/* 정보 */}
               <View style={styles.albumInfo}>
                 <Text style={styles.albumTitle} numberOfLines={1}>{item.title || '제목 없음'}</Text>
-                <Text style={styles.albumMeta}>📅 {formatDateKorean(item.date)}</Text>
+                <View style={styles.albumMetaRow}>
+                  <Ionicons name="calendar-outline" size={11} color={COLORS.textSecondary} style={{ marginRight: 3 }} />
+                  <Text style={styles.albumMeta}>{formatDateKorean(item.date)}</Text>
+                </View>
                 {item.location ? (
-                  <Text style={styles.albumMeta} numberOfLines={1}>📍 {item.location}</Text>
+                  <View style={styles.albumMetaRow}>
+                    <Ionicons name="location-outline" size={11} color={COLORS.textSecondary} style={{ marginRight: 3 }} />
+                    <Text style={styles.albumMeta} numberOfLines={1}>{item.location}</Text>
+                  </View>
                 ) : null}
                 {weatherStr ? (
                   <Text style={styles.albumMeta}>{weatherStr}</Text>
                 ) : null}
-                <Text style={styles.albumCount}>🖼️ {item.photos.length}장의 사진</Text>
+                <View style={styles.albumMetaRow}>
+                  <Ionicons name="images-outline" size={11} color={COLORS.purple} style={{ marginRight: 3 }} />
+                  <Text style={styles.albumCount}>{item.photos.length}장의 사진</Text>
+                </View>
               </View>
             </TouchableOpacity>
           );
         }}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>{showSelectedOnly ? '☑️' : '📭'}</Text>
+            <Ionicons
+              name={showSelectedOnly ? 'checkmark-circle-outline' : 'mail-outline'}
+              size={48} color={COLORS.textMuted} style={{ marginBottom: 12 }}
+            />
             <Text style={styles.emptyText}>
               {showSelectedOnly ? '선택된 앨범이 없습니다.' : '앨범이 없습니다.'}
             </Text>
@@ -316,17 +348,26 @@ export default function ExportPDFScreen() {
       <View style={[styles.footer, { paddingBottom: TAB_BAR_HEIGHT + 6 }]}>
         {/* 선택 요약 */}
         <View style={styles.footerSummary}>
-          <Text style={styles.footerSummaryItem}>
-            📐 {pageSize === 'A4' ? 'A4 (210×297mm)' : 'A5 (148×210mm)'}
-          </Text>
+          <View style={styles.footerSummaryItemRow}>
+            <Ionicons name="resize-outline" size={11} color={COLORS.textSecondary} style={{ marginRight: 3 }} />
+            <Text style={styles.footerSummaryItem}>
+              {pageSize === 'A4' ? 'A4 (210×297mm)' : 'A5 (148×210mm)'}
+            </Text>
+          </View>
           <Text style={styles.footerSummaryDot}>·</Text>
-          <Text style={styles.footerSummaryItem}>
-            🖼️ {LAYOUTS.find(l => l.key === layout)?.label}
-          </Text>
+          <View style={styles.footerSummaryItemRow}>
+            <Ionicons name="images-outline" size={11} color={COLORS.textSecondary} style={{ marginRight: 3 }} />
+            <Text style={styles.footerSummaryItem}>
+              {LAYOUTS.find(l => l.key === layout)?.label}
+            </Text>
+          </View>
           <Text style={styles.footerSummaryDot}>·</Text>
-          <Text style={[styles.footerSummaryItem, selected.size > 0 && { color: COLORS.purple }]}>
-            ✅ {selected.size}개 앨범
-          </Text>
+          <View style={styles.footerSummaryItemRow}>
+            <Ionicons name="checkmark-circle-outline" size={11} color={selected.size > 0 ? COLORS.purple : COLORS.textSecondary} style={{ marginRight: 3 }} />
+            <Text style={[styles.footerSummaryItem, selected.size > 0 && { color: COLORS.purple }]}>
+              {selected.size}개 앨범
+            </Text>
+          </View>
         </View>
         {/* 진행상황 표시 */}
         {generating && (
@@ -334,35 +375,23 @@ export default function ExportPDFScreen() {
             <View style={styles.progressBar}>
               <View style={[
                 styles.progressFill,
-                {
-                  width: `${progress
-                    ? Math.round((progress.current / progress.total) * 100)
-                    : 0}%` as any
-                }
+                { width: `${progress?.percent ?? 0}%` as any }
               ]} />
               <Text style={styles.progressText}>
                 {!progress
                   ? 'PDF 생성 준비 중...'
-                  : progress.current === 0
-                    ? `「${progress.albumTitle}」 생성 중...`
-                    : progress.current === progress.total
-                      ? `✅ 모든 PDF 생성 완료!`
-                      : `${progress.current}/${progress.total} 완료 · 「${progress.albumTitle}」 생성 중...`}
+                  : `「${progress.albumTitle}」 ${progress.step}`}
               </Text>
             </View>
             <View style={styles.progressPercentRow}>
               <View style={styles.progressTrack}>
                 <View style={[
                   styles.progressThumb,
-                  {
-                    width: `${progress
-                      ? Math.round((progress.current / progress.total) * 100)
-                      : 0}%` as any
-                  }
+                  { width: `${progress?.percent ?? 0}%` as any }
                 ]} />
               </View>
               <Text style={styles.progressPercent}>
-                {progress ? Math.round((progress.current / progress.total) * 100) : 0}%
+                {progress?.percent ?? 0}%
               </Text>
             </View>
           </View>
@@ -380,13 +409,14 @@ export default function ExportPDFScreen() {
                 {'  '}
                 {!progress
                   ? 'PDF 생성 준비 중...'
-                  : progress.current === 0
-                    ? `「${progress.albumTitle}」 생성 중...`
-                    : `${progress.current}/${progress.total} PDF 생성 중...`}
+                  : `${progress.percent}% · ${progress.step}`}
               </Text>
             </View>
           ) : (
-            <Text style={styles.genBtnText}>📄 PDF 생성하기</Text>
+            <View style={styles.genBtnContent}>
+              <Ionicons name="document-text-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.genBtnText}>PDF 생성하기</Text>
+            </View>
           )}
         </TouchableOpacity>
       </View>
@@ -403,7 +433,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
   },
   backBtn: { padding: 4, marginRight: 4 },
-  backText: { fontSize: 24, color: COLORS.text },
+  headerTitleRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
   selectAllText: { fontSize: 14, color: COLORS.purple, fontWeight: '600' },
 
@@ -411,9 +441,12 @@ const styles = StyleSheet.create({
 
   /* ── 섹션 ── */
   section: { marginBottom: 4 },
+  sectionTitleRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 10,
+  },
   sectionTitle: {
     fontSize: 14, fontWeight: '700', color: COLORS.text,
-    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 10,
   },
 
   /* ── 용지 크기 ── */
@@ -514,16 +547,16 @@ const styles = StyleSheet.create({
   },
   checkCircleSelected: { borderColor: COLORS.pink, backgroundColor: COLORS.pink },
   checkMark: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  albumMetaRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
   thumb: { width: 64, height: 64, borderRadius: 12, marginRight: 12 },
   thumbPlaceholder: {
     backgroundColor: COLORS.bgPurple, alignItems: 'center', justifyContent: 'center',
   },
   albumInfo: { flex: 1 },
   albumTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: 4 },
-  albumMeta: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 2 },
+  albumMeta: { fontSize: 12, color: COLORS.textSecondary },
   albumCount: { fontSize: 12, color: COLORS.purple, fontWeight: '600', marginTop: 2 },
   empty: { alignItems: 'center', paddingTop: 60 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { fontSize: 15, color: COLORS.textMuted },
   emptyAddBtn: {
     marginTop: 16, paddingHorizontal: 20, paddingVertical: 10,
@@ -553,6 +586,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, flexWrap: 'wrap',
   },
+  footerSummaryItemRow: { flexDirection: 'row', alignItems: 'center' },
   footerSummaryItem: { fontSize: 12, color: COLORS.textSecondary, fontWeight: '500' },
   footerSummaryDot: { fontSize: 12, color: COLORS.textMuted },
   genBtn: {

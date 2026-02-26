@@ -8,6 +8,7 @@ import {
   Animated, FlatList, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS } from './src/constants';
 import { RootStackParamList } from './src/types';
@@ -70,108 +71,22 @@ const TAB_ITEMS: { name: keyof TabParamList; label: string }[] = [
   { name: 'SettingsTab', label: '설정' },
 ];
 
-/* ── SVG 스타일 탭 아이콘 ── */
+/* ── Ionicons 탭 아이콘 ── */
 function TabIconView({ name, active }: { name: string; active: boolean }) {
   const color = active ? '#fff' : '#9CA3AF';
   const size = 22;
 
   if (name === 'HomeTab') {
-    return (
-      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{
-          width: 0, height: 0,
-          borderLeftWidth: 11, borderRightWidth: 11, borderBottomWidth: 9,
-          borderLeftColor: 'transparent', borderRightColor: 'transparent',
-          borderBottomColor: color, marginBottom: 1,
-        }} />
-        <View style={{ width: 14, height: 9, backgroundColor: color, borderRadius: 1 }}>
-          <View style={{
-            position: 'absolute', bottom: 0, left: '50%', marginLeft: -2.5,
-            width: 5, height: 5, backgroundColor: active ? COLORS.gradientStart : '#E5E7EB',
-            borderTopLeftRadius: 2, borderTopRightRadius: 2,
-          }} />
-        </View>
-      </View>
-    );
+    return <Ionicons name={active ? 'home' : 'home-outline'} size={size} color={color} />;
   }
-
   if (name === 'AddTab') {
-    return (
-      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{ width: 18, height: 2.5, backgroundColor: color, borderRadius: 1.5, position: 'absolute' }} />
-        <View style={{ width: 2.5, height: 18, backgroundColor: color, borderRadius: 1.5, position: 'absolute' }} />
-      </View>
-    );
+    return <Ionicons name="add" size={size} color={color} />;
   }
-
   if (name === 'CalendarTab') {
-    return (
-      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{
-          width: 16, height: 15, borderWidth: 1.8, borderColor: color,
-          borderRadius: 3,
-        }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: -4 }}>
-            <View style={{ width: 2.5, height: 5, backgroundColor: color, borderRadius: 1 }} />
-            <View style={{ width: 2.5, height: 5, backgroundColor: color, borderRadius: 1 }} />
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 2 }}>
-            <View style={{ width: 2.5, height: 2.5, backgroundColor: color, borderRadius: 1 }} />
-            <View style={{ width: 2.5, height: 2.5, backgroundColor: color, borderRadius: 1 }} />
-            <View style={{ width: 2.5, height: 2.5, backgroundColor: color, borderRadius: 1 }} />
-          </View>
-        </View>
-      </View>
-    );
+    return <Ionicons name={active ? 'calendar' : 'calendar-outline'} size={size} color={color} />;
   }
-
-  // 설정 아이콘 - 기어 모양 (원형 테두리 + 6개 돌기 + 중앙 원 구멍)
-  const gearSize = 20;
-  const toothPositions = [0, 60, 120, 180, 240, 300]; // 6방향 돌기
-  return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ width: gearSize, height: gearSize, alignItems: 'center', justifyContent: 'center' }}>
-        {/* 바깥 원 (기어 몸체) */}
-        <View style={{
-          position: 'absolute',
-          width: gearSize, height: gearSize, borderRadius: gearSize / 2,
-          backgroundColor: color,
-        }} />
-        {/* 6개 돌기 */}
-        {toothPositions.map((deg) => {
-          const rad = (deg * Math.PI) / 180;
-          const offset = gearSize * 0.28;
-          const tx = Math.sin(rad) * offset;
-          const ty = -Math.cos(rad) * offset;
-          const isVertical = deg === 0 || deg === 180;
-          return (
-            <View
-              key={deg}
-              style={{
-                position: 'absolute',
-                width: isVertical ? 4.5 : 3.5,
-                height: isVertical ? 3.5 : 4.5,
-                borderRadius: 1,
-                backgroundColor: color,
-                transform: [
-                  { translateX: tx },
-                  { translateY: ty },
-                  { rotate: `${deg}deg` },
-                ],
-              }}
-            />
-          );
-        })}
-        {/* 중앙 원 구멍 */}
-        <View style={{
-          position: 'absolute',
-          width: gearSize * 0.42, height: gearSize * 0.42,
-          borderRadius: gearSize * 0.21,
-          backgroundColor: active ? COLORS.gradientStart : '#fff',
-        }} />
-      </View>
-    </View>
-  );
+  // SettingsTab
+  return <Ionicons name={active ? 'settings' : 'settings-outline'} size={size} color={color} />;
 }
 
 /* ── 추가 바텀시트 (그룹/앨범 선택) - 탭바 위에 떠서 탭바가 항상 보임 ── */
@@ -259,13 +174,13 @@ function AddBottomSheet({ visible, onClose, navigation }: AddBottomSheetProps) {
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                   style={addSheetStyles.rowIconBox}
                 >
-                  <Text style={addSheetStyles.rowIconText}>👥</Text>
+                  <Ionicons name="people-outline" size={26} color="#fff" />
                 </LinearGradient>
                 <View style={{ flex: 1 }}>
                   <Text style={addSheetStyles.rowTitle}>그룹 추가</Text>
                   <Text style={addSheetStyles.rowSub}>새로운 그룹(인물)을 만들어요</Text>
                 </View>
-                <Text style={addSheetStyles.rowChevron}>›</Text>
+                <Ionicons name="chevron-forward" size={22} color={COLORS.textMuted} />
               </TouchableOpacity>
 
               {/* 앨범 추가 */}
@@ -275,27 +190,27 @@ function AddBottomSheet({ visible, onClose, navigation }: AddBottomSheetProps) {
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                   style={addSheetStyles.rowIconBox}
                 >
-                  <Text style={addSheetStyles.rowIconText}>📚</Text>
+                  <Ionicons name="book-outline" size={26} color="#fff" />
                 </LinearGradient>
                 <View style={{ flex: 1 }}>
                   <Text style={addSheetStyles.rowTitle}>앨범 추가</Text>
                   <Text style={addSheetStyles.rowSub}>그룹에 새 앨범을 만들어요</Text>
                 </View>
-                <Text style={addSheetStyles.rowChevron}>›</Text>
+                <Ionicons name="chevron-forward" size={22} color={COLORS.textMuted} />
               </TouchableOpacity>
             </>
           ) : (
             <>
               <View style={addSheetStyles.stepHeader}>
                 <TouchableOpacity onPress={() => setStep('select')} style={addSheetStyles.backBtn}>
-                  <Text style={addSheetStyles.backBtnText}>←</Text>
+                  <Ionicons name="arrow-back-outline" size={24} color={COLORS.text} />
                 </TouchableOpacity>
                 <Text style={addSheetStyles.title}>어떤 그룹에 추가할까요?</Text>
               </View>
 
               {children.length === 0 ? (
                 <View style={addSheetStyles.emptyGroup}>
-                  <Text style={addSheetStyles.emptyGroupIcon}>👥</Text>
+                  <Ionicons name="people-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 12 }} />
                   <Text style={addSheetStyles.emptyGroupText}>먼저 그룹을 만들어주세요!</Text>
                   <TouchableOpacity style={addSheetStyles.emptyGroupBtn} onPress={handleAddGroup}>
                     <Text style={addSheetStyles.emptyGroupBtnText}>+ 그룹 만들기</Text>
@@ -322,7 +237,7 @@ function AddBottomSheet({ visible, onClose, navigation }: AddBottomSheetProps) {
                       )}
                       <View style={[addSheetStyles.colorDot, { backgroundColor: item.color }]} />
                       <Text style={addSheetStyles.groupName} numberOfLines={1}>{item.name}</Text>
-                      <Text style={addSheetStyles.rowChevron}>›</Text>
+                      <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
                     </TouchableOpacity>
                   )}
                 />
@@ -379,7 +294,6 @@ const addSheetStyles = StyleSheet.create({
   backBtn: {
     width: 32, height: 32, alignItems: 'center', justifyContent: 'center',
   },
-  backBtnText: { fontSize: 22, color: COLORS.text },
 
   /* 추가 선택 행 */
   row: {
@@ -392,10 +306,8 @@ const addSheetStyles = StyleSheet.create({
     width: 52, height: 52, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
   },
-  rowIconText: { fontSize: 26 },
   rowTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text, marginBottom: 3 },
   rowSub: { fontSize: 13, color: COLORS.textSecondary },
-  rowChevron: { fontSize: 22, color: COLORS.textMuted },
 
   /* 그룹 선택 행 */
   groupRow: {
@@ -428,7 +340,6 @@ const addSheetStyles = StyleSheet.create({
   emptyGroup: {
     alignItems: 'center', paddingVertical: 32,
   },
-  emptyGroupIcon: { fontSize: 48, marginBottom: 12 },
   emptyGroupText: {
     fontSize: 15, color: COLORS.textSecondary, marginBottom: 16,
   },

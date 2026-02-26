@@ -5,6 +5,7 @@ import {
   ScrollView, SectionList, Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Album, Child, FilterType, RootStackParamList } from '../types';
@@ -123,7 +124,7 @@ export default function AlbumListScreen() {
       >
         {selectMode && (
           <View style={[styles.check, isSelected && styles.checkActive]}>
-            {isSelected && <Text style={styles.checkMark}>✓</Text>}
+            {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
           </View>
         )}
 
@@ -133,7 +134,7 @@ export default function AlbumListScreen() {
             <Image source={{ uri: cover.uri }} style={styles.thumb} />
           ) : (
             <View style={[styles.thumb, styles.thumbEmpty]}>
-              <Text style={{ fontSize: 28 }}>📷</Text>
+              <Ionicons name="camera-outline" size={28} color={COLORS.purple} />
             </View>
           )}
         </View>
@@ -146,14 +147,14 @@ export default function AlbumListScreen() {
           {/* 메타 정보 */}
           <View style={styles.metaGrid}>
             <View style={styles.metaItem}>
-              <Text style={styles.metaIcon}>📅</Text>
+              <Ionicons name="calendar-outline" size={12} color={COLORS.calendarIcon} style={{ marginRight: 4 }} />
               <Text style={styles.metaText} numberOfLines={1}>
                 {formatAlbumDate(item.date, item.dateEnd)}
               </Text>
             </View>
             {item.location ? (
               <View style={styles.metaItem}>
-                <Text style={[styles.metaIcon, { color: COLORS.purple }]}>📍</Text>
+                <Ionicons name="location-outline" size={12} color={COLORS.purple} style={{ marginRight: 4 }} />
                 <Text style={styles.metaText} numberOfLines={1}>{item.location}</Text>
               </View>
             ) : null}
@@ -163,7 +164,7 @@ export default function AlbumListScreen() {
               </View>
             ) : null}
             <View style={styles.metaItem}>
-              <Text style={[styles.metaIcon, { fontSize: 11 }]}>🖼</Text>
+              <Ionicons name="images-outline" size={12} color={COLORS.purple} style={{ marginRight: 4 }} />
               <Text style={[styles.metaText, { color: COLORS.purple, fontWeight: '600' }]}>
                 {item.photos.length}장
               </Text>
@@ -171,7 +172,7 @@ export default function AlbumListScreen() {
           </View>
         </View>
 
-        <Text style={styles.chevron}>›</Text>
+        <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} style={{ paddingLeft: 4 }} />
       </TouchableOpacity>
     );
   };
@@ -197,7 +198,7 @@ export default function AlbumListScreen() {
       {/* 헤더 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
+          <Ionicons name="arrow-back-outline" size={24} color={COLORS.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           {child?.photoUri ? (
@@ -209,9 +210,19 @@ export default function AlbumListScreen() {
         </View>
         <View style={styles.headerRight}>
           {albums.length > 0 && (
-            <TouchableOpacity style={styles.iconBtn}
-              onPress={() => { setSelectMode(!selectMode); setSelected(new Set()); }}>
-              <Text style={styles.iconBtnText}>{selectMode ? '취소' : 'PDF'}</Text>
+            <TouchableOpacity
+              style={selectMode ? styles.cancelBtn : styles.pdfIconBtn}
+              onPress={() => { setSelectMode(!selectMode); setSelected(new Set()); }}
+              activeOpacity={0.8}
+            >
+              {selectMode ? (
+                <Text style={styles.cancelBtnText}>취소</Text>
+              ) : (
+                <>
+                  <Ionicons name="document-text-outline" size={15} color="#fff" style={{ marginRight: 5 }} />
+                  <Text style={styles.pdfIconBtnText}>PDF</Text>
+                </>
+              )}
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -231,7 +242,7 @@ export default function AlbumListScreen() {
 
       {/* 검색 */}
       <View style={styles.searchBox}>
-        <Text style={styles.searchIcon}>🔍</Text>
+        <Ionicons name="search-outline" size={16} color={COLORS.textMuted} style={{ marginRight: 8 }} />
         <TextInput
           style={styles.searchInput} placeholder="제목, 장소, 날짜 검색..."
           placeholderTextColor={COLORS.textMuted}
@@ -239,7 +250,7 @@ export default function AlbumListScreen() {
         />
         {searchText ? (
           <TouchableOpacity onPress={() => setSearchText('')}>
-            <Text style={{ color: COLORS.textMuted, fontSize: 18 }}>✕</Text>
+            <Ionicons name="close" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
         ) : null}
       </View>
@@ -267,7 +278,10 @@ export default function AlbumListScreen() {
               if (selected.size === 0) { Alert.alert('알림', '앨범을 선택해주세요.'); return; }
               navigation.navigate('ExportPDF', { albumIds: Array.from(selected) });
             }}>
-            <Text style={styles.pdfBtnText}>📄 PDF 내보내기</Text>
+            <View style={styles.pdfBtnInner}>
+              <Ionicons name="document-text-outline" size={14} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.pdfBtnText}>PDF 내보내기</Text>
+            </View>
           </TouchableOpacity>
         </View>
       )}
@@ -275,7 +289,7 @@ export default function AlbumListScreen() {
       {/* 앨범 목록 */}
       {albums.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>📷</Text>
+          <Ionicons name="camera-outline" size={64} color={COLORS.purple} style={{ marginBottom: 16 }} />
           <Text style={styles.emptyTitle}>첫 앨범을 만들어보세요!</Text>
           <TouchableOpacity
             onPress={() => navigation.navigate('CreateAlbum', { childId })}
@@ -319,18 +333,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12,
   },
   backBtn: { padding: 4, marginRight: 8 },
-  backText: { fontSize: 24, color: COLORS.text },
   headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerAvatar: { width: 30, height: 30, borderRadius: 15 },
   headerEmoji: { fontSize: 22 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  iconBtn: {
-    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16,
-    borderWidth: 1.5, borderColor: COLORS.pink,
-    backgroundColor: 'rgba(255,255,255,0.8)',
+  /* 헤더 PDF 버튼 - 홈화면 pdfIconBtn과 동일한 스타일 */
+  pdfIconBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    height: 36, paddingHorizontal: 14, borderRadius: 18,
+    backgroundColor: COLORS.purple,
+    shadowColor: COLORS.purple, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
   },
-  iconBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.pink },
+  pdfIconBtnText: { fontSize: 13, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+  /* 취소 버튼 */
+  cancelBtn: {
+    height: 36, paddingHorizontal: 14, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderWidth: 1.5, borderColor: COLORS.pink,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cancelBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.pink },
   addBtn: {
     width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',
@@ -347,17 +371,21 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
-  searchIcon: { fontSize: 16, marginRight: 8 },
   searchInput: { flex: 1, fontSize: 14, color: COLORS.text, paddingVertical: 10 },
 
   filterScroll: { maxHeight: 48 },
-  filterContent: { paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
+  filterContent: { paddingHorizontal: 16, paddingBottom: 8, gap: 8, alignItems: 'center' },
   filterTab: {
     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.8)', borderWidth: 1.5, borderColor: COLORS.border,
+    alignItems: 'center', justifyContent: 'center',
   },
   filterTabActive: { backgroundColor: COLORS.pink, borderColor: COLORS.pink },
-  filterTabText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
+  filterTabText: {
+    fontSize: 13, fontWeight: '600', color: COLORS.textSecondary,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
+  },
   filterTabTextActive: { color: '#fff' },
 
   selectBar: {
@@ -367,6 +395,7 @@ const styles = StyleSheet.create({
   },
   selectInfo: { fontSize: 14, color: COLORS.pink, fontWeight: '600' },
   pdfBtn: { backgroundColor: COLORS.pink, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 8 },
+  pdfBtnInner: { flexDirection: 'row', alignItems: 'center' },
   pdfBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
   sectionHeader: {
@@ -397,7 +426,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', zIndex: 10,
   },
   checkActive: { backgroundColor: COLORS.pink },
-  checkMark: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
 
   /* ── 썸네일: 카드 내부 + 둥근 모서리 (그룹카드 스타일) ── */
   thumbWrap: {
@@ -421,14 +449,10 @@ const styles = StyleSheet.create({
   },
   metaGrid: { gap: 4 },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaIcon: { fontSize: 12, color: COLORS.calendarIcon },
   metaText: { fontSize: 12, color: COLORS.textSecondary, flexShrink: 1 },
-
-  chevron: { fontSize: 20, color: COLORS.textMuted, paddingLeft: 4 },
 
   /* 빈 상태 */
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  emptyIcon: { fontSize: 64, marginBottom: 16 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 24 },
   emptyBtn: {
     borderRadius: 24, paddingHorizontal: 24, paddingVertical: 13,

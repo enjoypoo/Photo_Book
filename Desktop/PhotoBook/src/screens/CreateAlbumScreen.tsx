@@ -5,6 +5,7 @@ import {
   ActivityIndicator, SafeAreaView, StatusBar, Animated,
   Keyboard, TouchableWithoutFeedback,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -253,7 +254,7 @@ export default function CreateAlbumScreen() {
       {/* ── 헤더 ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBack}>
-          <Text style={styles.headerBackText}>←</Text>
+          <Ionicons name="arrow-back-outline" size={24} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{isEdit ? '앨범 수정' : '새 앨범 만들기'}</Text>
         <TouchableOpacity
@@ -314,7 +315,10 @@ export default function CreateAlbumScreen() {
             )}
           </View>
           {exifApplied && (
-            <Text style={styles.exifNote}>📷 사진 촬영 날짜가 자동으로 적용되었습니다</Text>
+            <View style={styles.exifNoteRow}>
+            <Ionicons name="camera-outline" size={13} color={COLORS.purple} style={{ marginRight: 4 }} />
+            <Text style={styles.exifNote}>사진 촬영 날짜가 자동으로 적용되었습니다</Text>
+          </View>
           )}
 
           {/* ── 위치 ── */}
@@ -329,7 +333,7 @@ export default function CreateAlbumScreen() {
             />
             <TouchableOpacity style={styles.gpsBtn} onPress={detectLocation} disabled={loadingLocation}>
               {loadingLocation ? <ActivityIndicator size="small" color={COLORS.pink} />
-                : <Text style={styles.gpsBtnText}>📍</Text>}
+                : <Ionicons name="location-outline" size={22} color={COLORS.pink} />}
             </TouchableOpacity>
           </View>
 
@@ -376,7 +380,12 @@ export default function CreateAlbumScreen() {
             style={[styles.photoUploaderBox, photos.length >= MAX_PHOTOS && styles.photoUploaderBoxFull]}
             onPress={showPhotoSheet}
           >
-            <Text style={styles.photoUploaderIcon}>{photos.length >= MAX_PHOTOS ? '🚫' : '🖼️'}</Text>
+            <Ionicons
+              name={photos.length >= MAX_PHOTOS ? 'close-circle-outline' : 'images-outline'}
+              size={44}
+              color={photos.length >= MAX_PHOTOS ? COLORS.textMuted : COLORS.purple}
+              style={{ marginBottom: 8 }}
+            />
             <Text style={styles.photoUploaderTitle}>
               {photos.length >= MAX_PHOTOS ? '사진이 가득 찼어요' : '사진 추가하기'}
             </Text>
@@ -409,18 +418,22 @@ export default function CreateAlbumScreen() {
                         }
                       }},
                     ])}>
-                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>✕</Text>
+                    <Ionicons name="close" size={16} color="#fff" />
                   </TouchableOpacity>
                   {photo.takenAt && (
                     <View style={styles.photoExifBadge}>
+                      <Ionicons name="calendar-outline" size={11} color="#fff" style={{ marginRight: 3 }} />
                       <Text style={styles.photoExifText}>
-                        📅 {new Date(photo.takenAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        {new Date(photo.takenAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </Text>
                     </View>
                   )}
                   <TouchableOpacity style={styles.captionBtn}
                     onPress={() => setCaptionModal({ visible: true, photoId: photo.id, text: photo.caption })}>
-                    <Text style={styles.captionBtnText}>{photo.caption ? '✏️ 캡션 수정' : '+ 캡션 추가'}</Text>
+                    {photo.caption
+                      ? <><Ionicons name="pencil-outline" size={13} color={COLORS.pink} style={{ marginRight: 4 }} /><Text style={styles.captionBtnText}>캡션 수정</Text></>
+                      : <><Ionicons name="add" size={13} color={COLORS.pink} style={{ marginRight: 4 }} /><Text style={styles.captionBtnText}>캡션 추가</Text></>
+                    }
                   </TouchableOpacity>
                   {photo.caption ? (
                     <View style={styles.captionPreview}>
@@ -465,7 +478,7 @@ export default function CreateAlbumScreen() {
                 <Text style={styles.sheetTitle}>사진 추가</Text>
                 <TouchableOpacity style={styles.sheetRow} onPress={takePhoto}>
                   <View style={[styles.sheetIconBox, { backgroundColor: '#EFF6FF' }]}>
-                    <Text style={styles.sheetIconText}>📷</Text>
+                    <Ionicons name="camera-outline" size={26} color="#3B82F6" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.sheetRowTitle}>카메라로 촬영</Text>
@@ -474,7 +487,7 @@ export default function CreateAlbumScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.sheetRow} onPress={pickImages}>
                   <View style={[styles.sheetIconBox, { backgroundColor: COLORS.purplePastel }]}>
-                    <Text style={styles.sheetIconText}>🖼️</Text>
+                    <Ionicons name="images-outline" size={26} color={COLORS.purple} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.sheetRowTitle}>갤러리에서 선택</Text>
@@ -493,7 +506,10 @@ export default function CreateAlbumScreen() {
         onRequestClose={() => setCaptionModal({ ...captionModal, visible: false })}>
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalBox}>
-            <Text style={styles.modalTitle}>📝 사진 캡션</Text>
+            <View style={styles.modalTitleRow}>
+              <Ionicons name="create-outline" size={20} color={COLORS.text} style={{ marginRight: 8 }} />
+              <Text style={styles.modalTitle}>사진 캡션</Text>
+            </View>
             <TextInput
               style={styles.modalInput}
               placeholder="이 사진에 대한 이야기를 써주세요..."
@@ -532,7 +548,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
   },
   headerBack: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerBackText: { fontSize: 24, color: COLORS.text },
   headerTitle: { fontSize: 17, fontWeight: '600', color: COLORS.text },
   headerDoneBtn: { backgroundColor: COLORS.purple, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 7 },
   headerDoneBtnDisabled: { opacity: 0.4 },
@@ -548,7 +563,8 @@ const styles = StyleSheet.create({
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 0 },
   dateInput: { flex: 1, marginBottom: 16 },
   dateSeparator: { fontSize: 16, color: COLORS.textMuted, fontWeight: '500', marginBottom: 16 },
-  exifNote: { fontSize: 12, color: COLORS.purple, marginBottom: 8, fontWeight: '500' },
+  exifNoteRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  exifNote: { fontSize: 12, color: COLORS.purple, fontWeight: '500' },
   /* 위치 */
   rowInput: { flexDirection: 'row', gap: 8, marginBottom: 0 },
   gpsBtn: {
@@ -556,7 +572,6 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center',
     marginBottom: 16,
   },
-  gpsBtnText: { fontSize: 22 },
   /* 날씨 */
   weatherGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   weatherChip: {
@@ -581,7 +596,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.textMuted,
     backgroundColor: '#F9FAFB',
   },
-  photoUploaderIcon: { fontSize: 44, marginBottom: 8 },
   photoUploaderTitle: { fontSize: 16, color: COLORS.purple, fontWeight: '600' },
   photoUploaderSub: { fontSize: 13, color: COLORS.textMuted, marginTop: 4 },
   photoListTitle: { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 12 },
@@ -602,11 +616,13 @@ const styles = StyleSheet.create({
   },
   photoExifBadge: {
     position: 'absolute', bottom: 64, left: 10,
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12,
     paddingHorizontal: 10, paddingVertical: 4,
   },
   photoExifText: { color: '#fff', fontSize: 11, fontWeight: '500' },
   captionBtn: {
+    flexDirection: 'row', alignItems: 'center',
     margin: 12, alignSelf: 'flex-start',
     backgroundColor: COLORS.pinkPastel, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 7,
@@ -648,13 +664,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB', borderRadius: 20, padding: 16, marginBottom: 12,
   },
   sheetIconBox: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  sheetIconText: { fontSize: 26 },
   sheetRowTitle: { fontSize: 15, fontWeight: '600', color: COLORS.text },
   sheetRowSub: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   /* 모달 */
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalBox: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 36 },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 16 },
+  modalTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
   modalInput: {
     backgroundColor: COLORS.bgPink, borderRadius: 14, borderWidth: 1.5, borderColor: '#E5E7EB',
     paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: COLORS.text,
