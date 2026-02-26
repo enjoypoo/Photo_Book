@@ -16,34 +16,30 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const WEEK_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
-/* 특정 달의 앨범 날짜 목록 반환 (date, dateEnd 범위 포함) */
+/* 특정 달의 앨범 날짜 목록 반환 - 사진의 takenAt 날짜 기준 */
 function getAlbumDatesInMonth(albums: Album[], year: number, month: number): Set<string> {
   const dates = new Set<string>();
   const pad = (n: number) => String(n).padStart(2, '0');
   const monthStr = `${year}-${pad(month + 1)}`;
 
   for (const album of albums) {
-    // date ~ dateEnd 범위 내 날짜 추가
-    const start = new Date(album.date.slice(0, 10));
-    const end = album.dateEnd ? new Date(album.dateEnd.slice(0, 10)) : start;
-    const cur = new Date(start);
-    while (cur <= end) {
-      const str = `${cur.getFullYear()}-${pad(cur.getMonth() + 1)}-${pad(cur.getDate())}`;
+    for (const photo of album.photos) {
+      const dateSource = photo.takenAt ?? album.date;
+      const str = dateSource.slice(0, 10); // YYYY-MM-DD
       if (str.startsWith(monthStr)) dates.add(str);
-      cur.setDate(cur.getDate() + 1);
     }
   }
   return dates;
 }
 
-/* 선택 날짜에 해당하는 앨범 필터 (date ~ dateEnd 범위) */
+/* 선택 날짜에 해당하는 앨범 필터 - 해당 날짜에 찍힌 사진이 있는 앨범만 */
 function getAlbumsForDate(albums: Album[], dateStr: string): Album[] {
-  const target = new Date(dateStr);
-  return albums.filter(album => {
-    const start = new Date(album.date.slice(0, 10));
-    const end = album.dateEnd ? new Date(album.dateEnd.slice(0, 10)) : start;
-    return target >= start && target <= end;
-  });
+  return albums.filter(album =>
+    album.photos.some(photo => {
+      const dateSource = photo.takenAt ?? album.date;
+      return dateSource.slice(0, 10) === dateStr;
+    })
+  );
 }
 
 export default function CalendarScreen() {
