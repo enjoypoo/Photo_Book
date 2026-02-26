@@ -45,6 +45,7 @@ type TabParamList = {
 };
 
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
+const CalendarStack = createNativeStackNavigator<HomeStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
 /** 탭바 높이 상수 - 다른 화면에서 bottomPadding에 활용 */
@@ -60,6 +61,17 @@ function HomeStackNav() {
       <HomeStack.Screen name="CreateAlbum" component={CreateAlbumScreen} />
       <HomeStack.Screen name="ExportPDF" component={ExportPDFScreen} />
     </HomeStack.Navigator>
+  );
+}
+
+function CalendarStackNav() {
+  return (
+    <CalendarStack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+      <CalendarStack.Screen name="Home" component={CalendarScreen} />
+      <CalendarStack.Screen name="AlbumDetail" component={AlbumDetailScreen} />
+      <CalendarStack.Screen name="CreateAlbum" component={CreateAlbumScreen} />
+      <CalendarStack.Screen name="ExportPDF" component={ExportPDFScreen} />
+    </CalendarStack.Navigator>
   );
 }
 
@@ -426,7 +438,7 @@ export default function App() {
         >
           <Tab.Screen name="HomeTab" component={HomeStackNav} />
           <Tab.Screen name="AddTab" component={AddPlaceholder} />
-          <Tab.Screen name="CalendarTab" component={CalendarScreen} />
+          <Tab.Screen name="CalendarTab" component={CalendarStackNav} />
           <Tab.Screen name="SettingsTab" component={SettingsScreen} />
         </Tab.Navigator>
       </NavigationContainer>

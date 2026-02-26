@@ -181,10 +181,10 @@ function pageHeaderHtml(
         </div>
         <div style="font-size:${metaSize}px;color:#6b7280;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
           <span style="display:inline-flex;align-items:center;">
-            ${svgIcon(ICON_CALENDAR, iconSize, '#6b7280')}${dateStr}
+            ${svgCalendar(iconSize, '#6b7280')}${dateStr}
           </span>
           ${location ? `<span style="display:inline-flex;align-items:center;">
-            ${svgIcon(ICON_LOCATION, iconSize, '#6b7280')}${location}
+            ${svgLocation(iconSize, '#6b7280')}${location}
           </span>` : ''}
           ${weatherStr ? `<span>${weatherStr}</span>` : ''}
         </div>
@@ -198,7 +198,7 @@ function pageHeaderHtml(
         padding:0 10px;
         white-space:nowrap;">
         <span style="display:inline-flex;align-items:center;font-size:${countSize}px;font-weight:900;color:${themeColor};">
-          ${svgIcon(ICON_IMAGES, countSize + 2, themeColor)}${photoCount}장
+          ${svgImages(countSize + 2, themeColor)}${photoCount}장
         </span>
       </div>
     </div>`;
