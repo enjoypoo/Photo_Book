@@ -493,7 +493,7 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <InfoRow icon="phone-portrait-outline" label="버전" value={APP_VERSION} />
           <View style={styles.divider} />
-          <InfoRow icon="construct-outline" label="제작" value="PhotoBook App" />
+          <InfoRow icon="construct-outline" label="제작" value="Charisro" />
           <View style={styles.divider} />
           <InfoRow icon="save-outline" label="저장 방식" value="기기 내 로컬 저장" />
           <View style={styles.divider} />
