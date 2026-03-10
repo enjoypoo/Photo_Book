@@ -1,21 +1,47 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   Image, Alert, SafeAreaView, StatusBar, TextInput,
-  ScrollView, SectionList, Platform,
+  ScrollView, SectionList, Platform, Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Album, Child, FilterType, RootStackParamList } from '../types';
-import { loadAlbumsByChild, loadChildren, deleteAlbum } from '../store/albumStore';
+import SortableList, { DragHandleProps } from '../components/SortableList';
+import { loadAlbumsByChild, loadChildren, deleteAlbum, saveAlbumsOrder, toggleAlbumFavorite } from '../store/albumStore';
 import { COLORS, WEATHER_LABEL } from '../constants';
 import { formatAlbumDate, formatMonthYear } from '../utils/dateUtils';
 import { TAB_BAR_HEIGHT } from '../../App';
+import BannerAdItem from '../components/BannerAdItem';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'AlbumList'>;
 type Route = RouteProp<RootStackParamList, 'AlbumList'>;
+
+/* ── 섹션 데이터에 배너 광고 삽입 ────────────────────
+   10개 단위 그룹마다 광고 1개를 그룹 내 랜덤 위치에 삽입
+   (1개뿐인 경우에도 광고 1개 삽입)
+─────────────────────────────────────────────────── */
+type AlbumListItem = Album | { __adId: string };
+function injectAds(albums: Album[], sectionIdx: number): AlbumListItem[] {
+  if (albums.length === 0) return [];
+  const result: AlbumListItem[] = [];
+  let adCount = 0;
+  const n = albums.length;
+
+  for (let groupStart = 0; groupStart < n; groupStart += 10) {
+    const groupEnd = Math.min(groupStart + 10, n);
+    const groupSize = groupEnd - groupStart;
+    // 그룹 내 랜덤 위치(1번째 항목 이후~마지막 항목 이후 사이) 에 광고 삽입
+    const adPos = 1 + Math.floor(Math.random() * groupSize);
+    for (let i = 0; i < groupSize; i++) {
+      result.push(albums[groupStart + i]);
+      if (i + 1 === adPos) result.push({ __adId: `ad-${sectionIdx}-${adCount++}` });
+    }
+  }
+  return result;
+}
 
 const FILTER_TABS: { key: FilterType; label: string }[] = [
   { key: 'all',      label: '전체'   },
@@ -35,12 +61,51 @@ export default function AlbumListScreen() {
   const [searchText, setSearchText] = useState('');
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sortMode, setSortMode] = useState(false);
+  // 첫 번째 선택 앨범 유형으로 잠금 — ref로 stale closure 방지
+  const lockedTypeRef = useRef<'diary' | 'album' | null>(null);
+  const [lockedType, setLockedType] = useState<'diary' | 'album' | null>(null);
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const listRef = useRef<SectionList>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const scrollTopAnim = useRef(new Animated.Value(0)).current;
+  const scrollTopPrevRef = useRef(false);
+
+  const handleScroll = useCallback((event: any) => {
+    const y = event.nativeEvent.contentOffset.y;
+    const show = y > 300;
+    if (show !== scrollTopPrevRef.current) {
+      scrollTopPrevRef.current = show;
+      setShowScrollTop(show);
+      Animated.timing(scrollTopAnim, { toValue: show ? 1 : 0, duration: 200, useNativeDriver: true }).start();
+    }
+  }, [scrollTopAnim]);
+
+  const updateLockedType = (val: 'diary' | 'album' | null) => {
+    lockedTypeRef.current = val;
+    setLockedType(val);
+  };
+
+  const showToast = (type: 'diary' | 'album') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(toastAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.delay(2000),
+      Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start();
+    toastTimerRef.current = setTimeout(() => { toastAnim.setValue(0); }, 2600);
+  };
 
   useFocusEffect(useCallback(() => {
     loadChildren().then(list => setChild(list.find(c => c.id === childId) ?? null));
-    loadAlbumsByChild(childId).then(setAlbums);
+    loadAlbumsByChild(childId).then(list => setAlbums(sortFavoritesFirst(list)));
     setSelectMode(false);
     setSelected(new Set());
+    setSortMode(false);
+    updateLockedType(null);
   }, [childId]));
 
   const filtered = albums.filter(a => {
@@ -54,8 +119,8 @@ export default function AlbumListScreen() {
     return true;
   });
 
-  const grouped = (): { title: string; data: Album[] }[] => {
-    if (filter === 'all') return [{ title: '', data: filtered }];
+  const grouped = (): { title: string; data: AlbumListItem[] }[] => {
+    if (filter === 'all') return [{ title: '', data: injectAds(filtered, 0) }];
     const map: Record<string, Album[]> = {};
     for (const a of filtered) {
       let key = '';
@@ -65,15 +130,33 @@ export default function AlbumListScreen() {
       if (!map[key]) map[key] = [];
       map[key].push(a);
     }
-    return Object.entries(map).map(([title, data]) => ({ title, data }));
+    return Object.entries(map).map(([title, data], sIdx) => ({ title, data: injectAds(data, sIdx) }));
   };
 
   const toggleSelect = (id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    const ct = lockedTypeRef.current;
+    const album = albums.find(a => a.id === id);
+    if (!album) return;
+    const albumType = album.albumType ?? 'album';
+
+    if (selected.has(id)) {
+      // 선택 해제 — 마지막 선택이면 잠금 해제
+      const nextSize = selected.size - 1;
+      if (nextSize === 0) updateLockedType(null);
+      setSelected(prev => { const next = new Set(prev); next.delete(id); return next; });
+      return;
+    }
+
+    // 유형 불일치 차단 (ref로 최신값 읽기)
+    if (ct !== null && albumType !== ct) return;
+
+    // 첫 번째 선택 시 유형 잠금 + 토스트
+    if (ct === null) {
+      updateLockedType(albumType);
+      showToast(albumType);
+    }
+
+    setSelected(prev => { const next = new Set(prev); next.add(id); return next; });
   };
 
   const handleDelete = (id: string) => {
@@ -86,13 +169,35 @@ export default function AlbumListScreen() {
     ]);
   };
 
+  function sortFavoritesFirst<T extends { isFavorite?: boolean }>(list: T[]): T[] {
+    return [...list.filter(x => x.isFavorite), ...list.filter(x => !x.isFavorite)];
+  }
+
+  const handleFavoriteToggleAlbum = async (id: string) => {
+    await toggleAlbumFavorite(id);
+    setAlbums(prev => {
+      const updated = prev.map(a => a.id === id ? { ...a, isFavorite: !a.isFavorite } : a);
+      return filter === 'all' ? sortFavoritesFirst(updated) : updated;
+    });
+  };
+
+  const ALBUM_CARD_HEIGHT = 120; // thumb(72) + padding(12*2) + marginBottom(12) + meta text
+
   /* ── 앨범 카드 ── */
-  const AlbumCard = ({ item }: { item: Album }) => {
+  const AlbumCard = ({ item, isSortMode = false, isDragging = false, dragHandleProps }: {
+    item: Album;
+    isSortMode?: boolean;
+    isDragging?: boolean;
+    dragHandleProps?: DragHandleProps;
+  }) => {
     const cover = item.coverPhotoId
       ? item.photos.find(p => p.id === item.coverPhotoId) ?? item.photos[0]
       : item.photos[0];
     const isSelected = selected.has(item.id);
     const themeColor = child?.color;
+    const itemType = item.albumType ?? 'album';
+    // selectMode에서만 비활성화 계산 — ref로 최신값 읽기
+    const isDisabled = selectMode && lockedTypeRef.current !== null && !isSelected && itemType !== lockedTypeRef.current;
 
     const weatherDisplay = item.weather === 'other' && item.weatherCustom
       ? item.weatherCustom
@@ -100,31 +205,22 @@ export default function AlbumListScreen() {
         ? `${item.weatherEmoji} ${WEATHER_LABEL[item.weather] ?? ''}`
         : '';
 
-    return (
-      <TouchableOpacity
-        style={[
-          styles.card,
-          /* 카드 배경: 항상 흰색, 선택 시 테마색 테두리 */
-          isSelected && [
-            styles.cardSelected,
-            themeColor && { borderColor: themeColor },
-          ],
-        ]}
-        onPress={() => selectMode
-          ? toggleSelect(item.id)
-          : navigation.navigate('AlbumDetail', { albumId: item.id, childId })}
-        onLongPress={() => {
-          if (!selectMode) Alert.alert(item.title, '무엇을 할까요?', [
-            { text: '수정',  onPress: () => navigation.navigate('CreateAlbum', { childId, albumId: item.id }) },
-            { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
-            { text: '취소', style: 'cancel' },
-          ]);
-        }}
-        activeOpacity={0.85}
-      >
+    const cardStyle = [
+      styles.card,
+      isSelected && [styles.cardSelected, themeColor && { borderColor: themeColor }],
+      isDisabled && styles.cardDisabled,
+      isDragging && styles.cardDragging,
+    ];
+
+    const cardContent = (
+      <>
         {selectMode && (
-          <View style={[styles.check, isSelected && styles.checkActive]}>
-            {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+          <View style={[styles.check, isSelected && styles.checkActive, isDisabled && styles.checkDisabled]}>
+            {isSelected
+              ? <Ionicons name="checkmark" size={14} color="#fff" />
+              : isDisabled
+                ? <Ionicons name="lock-closed" size={10} color={COLORS.textMuted} />
+                : null}
           </View>
         )}
 
@@ -172,7 +268,69 @@ export default function AlbumListScreen() {
           </View>
         </View>
 
-        <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} style={{ paddingLeft: 4 }} />
+        {/* 오른쪽 컬럼: 위=유형배지, 아래=하트+화살표 */}
+        <View style={styles.cardRightCol}>
+          <View style={[styles.typeBadge, (item.albumType ?? 'album') === 'diary' ? styles.typeBadgeDiary : styles.typeBadgeAlbum]}>
+            <Text style={styles.typeBadgeText}>
+              {(item.albumType ?? 'album') === 'diary' ? '📔 일기형' : '📷 앨범형'}
+            </Text>
+          </View>
+          <View style={styles.cardActions}>
+            <TouchableOpacity
+              onPress={() => handleFavoriteToggleAlbum(item.id)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={styles.heartBtn}
+            >
+              <Ionicons
+                name={item.isFavorite ? 'heart' : 'heart-outline'}
+                size={20}
+                color={item.isFavorite ? '#EF4444' : COLORS.textMuted}
+              />
+            </TouchableOpacity>
+            {isSortMode ? (
+              <View
+                {...(dragHandleProps?.panHandlers ?? {})}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                style={styles.dragHandle}
+              >
+                <Ionicons name="reorder-three-outline" size={28} color={COLORS.textMuted} />
+              </View>
+            ) : (
+              <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} style={{ paddingLeft: 4 }} />
+            )}
+          </View>
+        </View>
+      </>
+    );
+
+    if (isSortMode) {
+      // 정렬 모드: View 사용 — TouchableOpacity가 PanResponder와 경쟁하지 않도록
+      return <View style={cardStyle}>{cardContent}</View>;
+    }
+
+    return (
+      <TouchableOpacity
+        style={cardStyle}
+        onPress={() => {
+          if (selectMode) {
+            const ct = lockedTypeRef.current;
+            if (ct !== null && !selected.has(item.id) && itemType !== ct) return;
+            toggleSelect(item.id);
+          } else {
+            navigation.navigate('AlbumDetail', { albumId: item.id, childId });
+          }
+        }}
+        onLongPress={() => {
+          if (selectMode) return;
+          Alert.alert(item.title, '무엇을 할까요?', [
+            { text: '수정',  onPress: () => navigation.navigate('CreateAlbum', { childId, albumId: item.id }) },
+            { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
+            { text: '취소', style: 'cancel' },
+          ]);
+        }}
+        activeOpacity={isDisabled ? 1 : 0.85}
+      >
+        {cardContent}
       </TouchableOpacity>
     );
   };
@@ -181,6 +339,12 @@ export default function AlbumListScreen() {
 
   /* 화면 배경색: 그룹 테마 12% 투명도 */
   const screenBg = child?.color ? child.color + '12' : COLORS.bgPink;
+
+  // selectBar 버튼 상태 계산
+  const selectBarType = lockedType ?? (albums[0]?.albumType ?? 'album');
+  const selectBarSelectableIds = albums.filter(a => (a.albumType ?? 'album') === selectBarType).map(a => a.id);
+  const selectBarHasSelection = selected.size > 0;
+  const selectBarIsAllSelected = selectBarSelectableIds.length > 0 && selectBarSelectableIds.every(id => selected.has(id));
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: screenBg }]}>
@@ -209,10 +373,10 @@ export default function AlbumListScreen() {
           <Text style={styles.headerTitle} numberOfLines={1}>{child?.name ?? ''}</Text>
         </View>
         <View style={styles.headerRight}>
-          {albums.length > 0 && (
+          {albums.length > 0 && !sortMode && (
             <TouchableOpacity
               style={selectMode ? styles.cancelBtn : styles.pdfIconBtn}
-              onPress={() => { setSelectMode(!selectMode); setSelected(new Set()); }}
+              onPress={() => { setSelectMode(!selectMode); setSelected(new Set()); updateLockedType(null); }}
               activeOpacity={0.8}
             >
               {selectMode ? (
@@ -225,23 +389,51 @@ export default function AlbumListScreen() {
               )}
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            onPress={() => navigation.navigate('CreateAlbum', { childId })}
-            activeOpacity={0.85}
-          >
-            <LinearGradient
-              colors={[COLORS.gradientStart, COLORS.gradientEnd]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={styles.addBtn}
+          {albums.length > 0 && !selectMode && filter === 'all' && (
+            <TouchableOpacity
+              style={[styles.sortBtn, sortMode && styles.sortBtnActive]}
+              onPress={async () => {
+                if (sortMode) {
+                  await saveAlbumsOrder(childId, albums.map(a => a.id));
+                }
+                setSortMode(v => !v);
+              }}
+              activeOpacity={0.8}
             >
-              <Text style={styles.addBtnText}>+</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+              {sortMode ? (
+                <Text style={styles.sortBtnDoneText}>완료</Text>
+              ) : (
+                <Ionicons name="reorder-three-outline" size={22} color={COLORS.purple} />
+              )}
+            </TouchableOpacity>
+          )}
+          {!sortMode && (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('CreateAlbum', { childId })}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={[COLORS.gradientStart, COLORS.gradientEnd]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={styles.addBtn}
+              >
+                <Text style={styles.addBtnText}>+</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
+      {/* 정렬 모드 힌트 바 */}
+      {sortMode && (
+        <View style={styles.sortHintBar}>
+          <Ionicons name="reorder-three-outline" size={16} color={COLORS.purple} style={{ marginRight: 6 }} />
+          <Text style={styles.sortHintText}>길게 누르고 드래그하여 순서를 변경하세요</Text>
+        </View>
+      )}
+
       {/* 검색 */}
-      <View style={styles.searchBox}>
+      <View style={[styles.searchBox, sortMode && styles.dimmed]} pointerEvents={sortMode ? 'none' : 'auto'}>
         <Ionicons name="search-outline" size={16} color={COLORS.textMuted} style={{ marginRight: 8 }} />
         <TextInput
           style={styles.searchInput} placeholder="제목, 장소, 날짜 검색..."
@@ -256,7 +448,8 @@ export default function AlbumListScreen() {
       </View>
 
       {/* 필터 탭 */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.filterScroll, sortMode && styles.dimmed]}
+        pointerEvents={sortMode ? 'none' : 'auto'}
         contentContainerStyle={styles.filterContent}>
         {FILTER_TABS.map(tab => (
           <TouchableOpacity key={tab.key}
@@ -273,6 +466,22 @@ export default function AlbumListScreen() {
       {selectMode && (
         <View style={styles.selectBar}>
           <Text style={styles.selectInfo}>{selected.size}개 선택</Text>
+          <TouchableOpacity
+            onPress={() => {
+              if (selectBarHasSelection) {
+                setSelected(new Set());
+                updateLockedType(null);
+              } else {
+                updateLockedType(selectBarType);
+                setSelected(new Set(selectBarSelectableIds));
+              }
+            }}
+            style={[styles.selectAllBtn, selectBarHasSelection && styles.selectAllBtnActive]}
+          >
+            <Text style={styles.selectAllBtnText}>
+              {!selectBarHasSelection ? '전체 선택' : selectBarIsAllSelected ? '전체 해제' : '선택 해제'}
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.pdfBtn}
             onPress={() => {
               if (selected.size === 0) { Alert.alert('알림', '앨범을 선택해주세요.'); return; }
@@ -304,10 +513,30 @@ export default function AlbumListScreen() {
             </LinearGradient>
           </TouchableOpacity>
         </View>
+      ) : sortMode ? (
+        <View style={{ flex: 1 }}>
+          <SortableList
+            data={albums}
+            keyExtractor={a => a.id}
+            itemHeight={ALBUM_CARD_HEIGHT}
+            onOrderChange={newAlbums => setAlbums(newAlbums)}
+            contentContainerStyle={[styles.listContent, { paddingBottom: TAB_BAR_HEIGHT + 20 }]}
+            renderItem={(album, _index, isDragging, handle) => (
+              <AlbumCard
+                item={album}
+                isSortMode
+                isDragging={isDragging}
+                dragHandleProps={handle}
+              />
+            )}
+          />
+        </View>
       ) : (
         <SectionList
+          ref={listRef}
+          style={{ flex: 1 }}
           sections={sections}
-          keyExtractor={item => item.id}
+          keyExtractor={item => '__adId' in item ? item.__adId : item.id}
           renderSectionHeader={({ section }) =>
             section.title ? (
               <View style={styles.sectionHeader}>
@@ -316,11 +545,58 @@ export default function AlbumListScreen() {
               </View>
             ) : null
           }
-          renderItem={({ item }) => <AlbumCard item={item} />}
+          renderItem={({ item }) => {
+            if ('__adId' in item) return <BannerAdItem />;
+            return <AlbumCard item={item} />;
+          }}
           contentContainerStyle={[styles.listContent, { paddingBottom: TAB_BAR_HEIGHT + 20 }]}
           showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
         />
       )}
+
+      {/* 맨위로 버튼 */}
+      <Animated.View
+        pointerEvents={showScrollTop ? 'auto' : 'none'}
+        style={[styles.scrollTopBtn, {
+          opacity: scrollTopAnim,
+          transform: [{ scale: scrollTopAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }],
+          bottom: TAB_BAR_HEIGHT + 16,
+        }]}
+      >
+        <TouchableOpacity
+          onPress={() => listRef.current?.scrollToLocation({ sectionIndex: 0, itemIndex: 0, animated: true })}
+          style={styles.scrollTopBtnInner}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="chevron-up" size={22} color="#fff" />
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* 유형 잠금 토스트 */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.toast,
+          {
+            opacity: toastAnim,
+            transform: [{ scale: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }],
+          },
+        ]}
+      >
+        <Ionicons
+          name={lockedType === 'diary' ? 'book-outline' : 'camera-outline'}
+          size={15}
+          color="#fff"
+          style={{ marginRight: 7 }}
+        />
+        <Text style={styles.toastText}>
+          {lockedType === 'diary'
+            ? '📔 일기형 앨범만 함께 선택할 수 있어요'
+            : '📷 앨범형 앨범만 함께 선택할 수 있어요'}
+        </Text>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -394,6 +670,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 16, borderRadius: 12, marginBottom: 8,
   },
   selectInfo: { fontSize: 14, color: COLORS.pink, fontWeight: '600' },
+  selectAllBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: COLORS.pink },
+  selectAllBtnActive: { backgroundColor: COLORS.purple },
+  selectAllBtnText: { fontSize: 12, color: '#fff', fontWeight: '600' },
   pdfBtn: { backgroundColor: COLORS.pink, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 8 },
   pdfBtnInner: { flexDirection: 'row', alignItems: 'center' },
   pdfBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
@@ -420,12 +699,14 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   cardSelected: { borderWidth: 2, borderColor: COLORS.pink },
+  cardDisabled: { opacity: 0.38, backgroundColor: '#F5F5F5' },
   check: {
     position: 'absolute', top: 10, right: 10, width: 24, height: 24,
     borderRadius: 12, borderWidth: 2, borderColor: COLORS.pink,
     backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', zIndex: 10,
   },
   checkActive: { backgroundColor: COLORS.pink },
+  checkDisabled: { borderColor: '#CCCCCC', backgroundColor: '#F0F0F0' },
 
   /* ── 썸네일: 카드 내부 + 둥근 모서리 (그룹카드 스타일) ── */
   thumbWrap: {
@@ -444,9 +725,14 @@ const styles = StyleSheet.create({
   /* 카드 정보 */
   cardBody: { flex: 1, paddingRight: 4 },
   cardTitle: {
-    fontSize: 15, fontWeight: '700', color: COLORS.text,
-    marginBottom: 8,
+    fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: 6,
   },
+  typeBadge: {
+    borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 0, alignSelf: 'flex-start',
+  },
+  typeBadgeDiary: { backgroundColor: '#FFF3E0' },
+  typeBadgeAlbum: { backgroundColor: '#F3E8FF' },
+  typeBadgeText: { fontSize: 11, fontWeight: '600', color: COLORS.purple },
   metaGrid: { gap: 4 },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaText: { fontSize: 12, color: COLORS.textSecondary, flexShrink: 1 },
@@ -460,4 +746,73 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
   },
   emptyBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  /* 정렬 버튼 */
+  sortBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(168,85,247,0.1)',
+    borderWidth: 1.5, borderColor: 'rgba(168,85,247,0.2)',
+  },
+  sortBtnActive: {
+    backgroundColor: COLORS.purple,
+    borderColor: COLORS.purple,
+  },
+  sortBtnDoneText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+
+  /* 정렬 힌트 바 */
+  sortHintBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 7, paddingHorizontal: 16,
+    backgroundColor: 'rgba(168,85,247,0.08)',
+    marginHorizontal: 16, marginBottom: 6, borderRadius: 10,
+  },
+  sortHintText: { fontSize: 12, color: COLORS.purple, fontWeight: '500' },
+
+  cardRightCol: { alignSelf: 'stretch', alignItems: 'flex-end', justifyContent: 'space-between', paddingVertical: 10 },
+  cardActions: { flexDirection: 'row', alignItems: 'center' },
+
+  /* 즐겨찾기 하트 버튼 */
+  heartBtn: { padding: 4, alignItems: 'center', justifyContent: 'center' },
+
+  /* 드래그 핸들 */
+  dragHandle: { padding: 4, alignItems: 'center', justifyContent: 'center' },
+  cardDragging: {
+    borderColor: COLORS.purple,
+    borderWidth: 2,
+  },
+
+  /* 딤드 상태 (정렬 모드에서 비활성 UI) */
+  dimmed: { opacity: 0.35 },
+
+  /* 유형 잠금 토스트 */
+  toast: {
+    position: 'absolute',
+    top: '42%',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(40,40,40,0.92)',
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    borderRadius: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  toastText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+
+  /* 맨위로 버튼 */
+  scrollTopBtn: {
+    position: 'absolute', right: 16,
+    shadowColor: COLORS.purple, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 8,
+  },
+  scrollTopBtnInner: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: COLORS.purple,
+    alignItems: 'center', justifyContent: 'center',
+  },
 });

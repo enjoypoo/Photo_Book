@@ -8,6 +8,21 @@ export function formatDateKorean(dateStr: string): string {
   return `${year}년 ${month}월 ${day}일 (${dayOfWeek})`;
 }
 
+/** 사진 날짜·시간 통일 포맷: YYYY.MM.DD(요일) hh:mm:ss */
+export function formatPhotoDateTime(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const days = ['일', '월', '화', '수', '목', '금', '토'];
+  const y  = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  const dow = days[d.getDay()];
+  const h  = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  const s  = String(d.getSeconds()).padStart(2, '0');
+  return `${y}.${mo}.${da}(${dow}) ${h}:${mi}:${s}`;
+}
+
 /** 촬영 시간 포함 포맷 (1장일 때) */
 export function formatDateTimeKorean(dateStr: string): string {
   const date = new Date(dateStr);

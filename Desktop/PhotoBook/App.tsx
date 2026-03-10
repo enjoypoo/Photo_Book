@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS } from './src/constants';
-import { RootStackParamList } from './src/types';
+import { RootStackParamList, SettingsStackParamList } from './src/types';
 import { Child } from './src/types';
 import { loadChildren } from './src/store/albumStore';
 
@@ -28,6 +28,7 @@ Notifications.setNotificationHandler({
 
 import HomeScreen from './src/screens/HomeScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
 import CreateChildScreen from './src/screens/CreateChildScreen';
 import AlbumListScreen from './src/screens/AlbumListScreen';
 import AlbumDetailScreen from './src/screens/AlbumDetailScreen';
@@ -46,6 +47,7 @@ type TabParamList = {
 
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const CalendarStack = createNativeStackNavigator<HomeStackParamList>();
+const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
 /** 탭바 높이 상수 - 다른 화면에서 bottomPadding에 활용 */
@@ -72,6 +74,15 @@ function CalendarStackNav() {
       <CalendarStack.Screen name="CreateAlbum" component={CreateAlbumScreen} />
       <CalendarStack.Screen name="ExportPDF" component={ExportPDFScreen} />
     </CalendarStack.Navigator>
+  );
+}
+
+function SettingsStackNav() {
+  return (
+    <SettingsStack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+      <SettingsStack.Screen name="Settings" component={SettingsScreen} />
+      <SettingsStack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+    </SettingsStack.Navigator>
   );
 }
 
@@ -439,7 +450,7 @@ export default function App() {
           <Tab.Screen name="HomeTab" component={HomeStackNav} />
           <Tab.Screen name="AddTab" component={AddPlaceholder} />
           <Tab.Screen name="CalendarTab" component={CalendarStackNav} />
-          <Tab.Screen name="SettingsTab" component={SettingsScreen} />
+          <Tab.Screen name="SettingsTab" component={SettingsStackNav} />
         </Tab.Navigator>
       </NavigationContainer>
     </View>

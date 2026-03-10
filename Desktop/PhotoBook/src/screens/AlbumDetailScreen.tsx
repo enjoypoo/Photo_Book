@@ -9,7 +9,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Album, Child, RootStackParamList } from '../types';
 import { getAlbumById, deleteAlbum, loadChildren } from '../store/albumStore';
 import { COLORS, WEATHER_LABEL } from '../constants';
-import { formatAlbumDate } from '../utils/dateUtils';
+import { formatAlbumDate, formatPhotoDateTime } from '../utils/dateUtils';
 import { TAB_BAR_HEIGHT } from '../../App';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'AlbumDetail'>;
@@ -113,6 +113,12 @@ export default function AlbumDetailScreen() {
                 <TouchableOpacity onPress={() => setFullscreen({ uri: photo.uri, caption: photo.caption })}>
                   <Image source={{ uri: photo.uri }} style={styles.photoImg} />
                   <View style={styles.photoIdx}><Text style={styles.photoIdxText}>{idx + 1}</Text></View>
+                  {photo.takenAt ? (
+                    <View style={styles.photoDateBadge}>
+                      <Ionicons name="calendar-outline" size={10} color="#fff" style={{ marginRight: 3 }} />
+                      <Text style={styles.photoDateText}>{formatPhotoDateTime(photo.takenAt)}</Text>
+                    </View>
+                  ) : null}
                 </TouchableOpacity>
                 {photo.caption ? (
                   <View style={[styles.captionBox, { backgroundColor: themeBg }]}>
@@ -207,6 +213,13 @@ const styles = StyleSheet.create({
     borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center',
   },
   photoIdxText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  photoDateBadge: {
+    position: 'absolute', bottom: 10, left: 10,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.52)', borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 4,
+  },
+  photoDateText: { color: '#fff', fontSize: 10, fontWeight: '500' },
   captionBox: { padding: 16, borderTopWidth: 1, borderTopColor: COLORS.borderLight },
   captionText: { fontSize: 14, color: COLORS.text, lineHeight: 20, fontStyle: 'italic' },
   noPhotos: { alignItems: 'center', padding: 32 },

@@ -10,13 +10,17 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { COLORS, STORAGE_KEY, CHILDREN_KEY } from '../constants';
 import { loadAlbums, loadChildren } from '../store/albumStore';
+import { SettingsStackParamList } from '../types';
 import { TAB_BAR_HEIGHT } from '../../App';
 
 const APP_VERSION = '1.0.0';
 
 export default function SettingsScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<SettingsStackParamList>>();
   const [groupCount, setGroupCount] = useState(0);
   const [albumCount, setAlbumCount] = useState(0);
   const [photoCount, setPhotoCount] = useState(0);
@@ -338,7 +342,7 @@ export default function SettingsScreen() {
 
   /* 사진 파일 정리 (고아 파일 삭제) */
   const handleCleanup = async () => {
-    Alert.alert('사진 파일 정리', '앨범에 없는 사진 파일을 정리할까요?', [
+    Alert.alert('앱 저장공간 정리', '삭제된 앨범의 잔여 파일을 앱 내부에서 정리합니다.\n핸드폰 갤러리 사진은 영향 없습니다.\n\n정리할까요?', [
       { text: '취소', style: 'cancel' },
       {
         text: '정리', onPress: async () => {
@@ -456,8 +460,8 @@ export default function SettingsScreen() {
             icon="brush-outline"
             iconBg="#EFF6FF"
             iconColor="#6366F1"
-            title="사진 파일 정리"
-            subtitle="사용하지 않는 임시 파일 삭제"
+            title="앱 저장공간 정리"
+            subtitle="삭제된 앨범의 잔여 파일 제거 (갤러리 영향 없음)"
             onPress={handleCleanup}
           />
           <View style={styles.divider} />
@@ -498,6 +502,15 @@ export default function SettingsScreen() {
           <InfoRow icon="save-outline" label="저장 방식" value="기기 내 로컬 저장" />
           <View style={styles.divider} />
           <InfoRow icon="lock-closed-outline" label="개인정보" value="서버 전송 없음" />
+          <View style={styles.divider} />
+          <SettingRow
+            icon="shield-checkmark-outline"
+            iconBg="#F0FDF4"
+            iconColor="#10B981"
+            title="개인정보처리방침"
+            subtitle="개인정보 수집·이용 안내"
+            onPress={() => navigation.navigate('PrivacyPolicy')}
+          />
         </View>
 
         {/* ── 도움말 ── */}

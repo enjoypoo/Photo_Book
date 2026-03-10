@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Album, Child } from '../types';
-import { STORAGE_KEY, CHILDREN_KEY } from '../constants';
+import { STORAGE_KEY, CHILDREN_KEY, CHILDREN_ORDER_KEY, ALBUM_ORDER_KEY_PREFIX } from '../constants';
 
 // 이미지 최적화 설정
 const MAX_DIMENSION = 1920; // 최대 가로/세로 px (이 이하면 리사이즈 안 함)
@@ -14,6 +14,25 @@ export async function loadChildren(): Promise<Child[]> {
     const d = await AsyncStorage.getItem(CHILDREN_KEY);
     return d ? JSON.parse(d) : [];
   } catch { return []; }
+}
+
+export async function loadChildrenOrdered(): Promise<Child[]> {
+  const children = await loadChildren();
+  try {
+    const raw = await AsyncStorage.getItem(CHILDREN_ORDER_KEY);
+    if (raw) {
+      const ids: string[] = JSON.parse(raw);
+      const idMap = new Map(children.map(c => [c.id, c]));
+      const ordered = ids.map(id => idMap.get(id)).filter(Boolean) as Child[];
+      const extra = children.filter(c => !ids.includes(c.id));
+      return [...ordered, ...extra];
+    }
+  } catch {}
+  return children;
+}
+
+export async function saveChildrenOrder(ids: string[]): Promise<void> {
+  await AsyncStorage.setItem(CHILDREN_ORDER_KEY, JSON.stringify(ids));
 }
 
 export async function saveChildren(children: Child[]): Promise<void> {
@@ -36,6 +55,14 @@ export async function deleteChild(id: string): Promise<void> {
   await saveAlbums(remaining);
 }
 
+export async function toggleChildFavorite(id: string): Promise<void> {
+  const list = await loadChildren();
+  const idx = list.findIndex(c => c.id === id);
+  if (idx < 0) return;
+  list[idx] = { ...list[idx], isFavorite: !list[idx].isFavorite };
+  await saveChildren(list);
+}
+
 // ─── Albums ───────────────────────────────────────────────────
 export async function loadAlbums(): Promise<Album[]> {
   try {
@@ -50,8 +77,23 @@ export async function saveAlbums(albums: Album[]): Promise<void> {
 
 export async function loadAlbumsByChild(childId: string): Promise<Album[]> {
   const all = await loadAlbums();
-  return all.filter(a => a.childId === childId)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const childAlbums = all.filter(a => a.childId === childId);
+  try {
+    const raw = await AsyncStorage.getItem(ALBUM_ORDER_KEY_PREFIX + childId);
+    if (raw) {
+      const ids: string[] = JSON.parse(raw);
+      const idMap = new Map(childAlbums.map(a => [a.id, a]));
+      const ordered = ids.map(id => idMap.get(id)).filter(Boolean) as Album[];
+      const extra = childAlbums.filter(a => !ids.includes(a.id))
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      return [...ordered, ...extra];
+    }
+  } catch {}
+  return childAlbums.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+export async function saveAlbumsOrder(childId: string, orderedIds: string[]): Promise<void> {
+  await AsyncStorage.setItem(ALBUM_ORDER_KEY_PREFIX + childId, JSON.stringify(orderedIds));
 }
 
 export async function getAlbumById(id: string): Promise<Album | null> {
@@ -64,6 +106,19 @@ export async function upsertAlbum(album: Album): Promise<void> {
   const idx = all.findIndex(a => a.id === album.id);
   if (idx >= 0) all[idx] = album; else all.unshift(album);
   await saveAlbums(all);
+}
+
+// ─── 그룹명 중복 검사 ─────────────────────────────────────
+// 수정 시(excludeId 있을 때)는 자기 자신 제외하고 검사
+export async function isChildNameDuplicate(
+  name: string,
+  excludeId?: string
+): Promise<boolean> {
+  const all = await loadChildren();
+  return all.some(c =>
+    c.name.trim() === name.trim() &&
+    c.id !== excludeId
+  );
 }
 
 // ─── 앨범명 중복 검사 (같은 childId 내에서) ───────────────
@@ -94,6 +149,14 @@ export async function deleteAlbum(id: string): Promise<void> {
     }
   }
   await saveAlbums(all.filter(a => a.id !== id));
+}
+
+export async function toggleAlbumFavorite(id: string): Promise<void> {
+  const all = await loadAlbums();
+  const idx = all.findIndex(a => a.id === id);
+  if (idx < 0) return;
+  all[idx] = { ...all[idx], isFavorite: !all[idx].isFavorite };
+  await saveAlbums(all);
 }
 
 // ─── 이미지 로컬 저장 (리사이즈 + 압축 최적화) ───────────────

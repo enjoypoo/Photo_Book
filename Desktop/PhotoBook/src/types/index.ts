@@ -17,6 +17,8 @@ export interface PhotoEntry {
   takenAt?: string;   // EXIF에서 읽은 촬영 일시 (ISO 8601)
 }
 
+export type AlbumType = 'diary' | 'album';
+
 export interface Album {
   id: string;
   childId: string;    // 어느 그룹의 앨범인지
@@ -27,11 +29,14 @@ export interface Album {
   weather: WeatherType | '';
   weatherEmoji: string;
   weatherCustom?: string; // '기타' 선택 시 직접 입력한 날씨
+  weatherList?: WeatherType[]; // 다중 선택 (최대 3개)
   story: string;
   photos: PhotoEntry[];
   coverPhotoId?: string;
+  albumType?: AlbumType; // 'diary'(최대 6장) | 'album'(최대 30장), undefined = 'album'
   createdAt: string;
   updatedAt: string;
+  isFavorite?: boolean;
 }
 
 export interface Child {
@@ -44,6 +49,7 @@ export interface Child {
   groupTypeCustom?: string; // 기타 구분 직접 입력
   birthDate?: string;     // 생성일(선택)
   createdAt: string;
+  isFavorite?: boolean;
 }
 
 export type FilterType = 'all' | 'date' | 'month' | 'year' | 'location';
@@ -62,4 +68,10 @@ export type RootStackParamList = {
   CreateChild: { childId?: string };
   ExportPDF: { albumIds: string[] };
   Settings: undefined;
+};
+
+/** 설정 탭 내부 스택 */
+export type SettingsStackParamList = {
+  Settings: undefined;
+  PrivacyPolicy: undefined;
 };

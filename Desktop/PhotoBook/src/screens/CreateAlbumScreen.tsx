@@ -10,13 +10,15 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import uuid from 'react-native-uuid';
-import { Album, PhotoEntry, RootStackParamList, WeatherOption } from '../types';
+import { Album, AlbumType, PhotoEntry, RootStackParamList, WeatherOption, WeatherType } from '../types';
 import { upsertAlbum, getAlbumById, saveImageLocally, isAlbumTitleDuplicate } from '../store/albumStore';
 
-const MAX_PHOTOS = 30; // 앨범당 최대 사진 수
+const MAX_PHOTOS_ALBUM = 30;
+const MAX_PHOTOS_DIARY = 6;
 import { COLORS, WEATHER_OPTIONS } from '../constants';
-import { getTodayISO, parseExifDate, toDateOnly, formatDateKorean, formatDateTimeKorean } from '../utils/dateUtils';
+import { getTodayISO, parseExifDate, toDateOnly, formatDateKorean, formatDateTimeKorean, formatPhotoDateTime } from '../utils/dateUtils';
 import { TAB_BAR_HEIGHT } from '../../App';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'CreateAlbum'>;
@@ -51,14 +53,16 @@ function calcDateRange(photos: PhotoEntry[]): { date: string; dateEnd?: string }
 export default function CreateAlbumScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
+  const insets = useSafeAreaInsets();
   const { childId, albumId } = route.params;
   const isEdit = !!albumId;
 
+  const [albumType, setAlbumType] = useState<AlbumType>('album');
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(getTodayISO());          // YYYY-MM-DD
   const [dateEnd, setDateEnd] = useState<string | undefined>();
   const [location, setLocation] = useState('');
-  const [weather, setWeather] = useState<WeatherOption>(WEATHER_OPTIONS[0]);
+  const [selectedWeathers, setSelectedWeathers] = useState<WeatherOption[]>([]);
   const [weatherCustom, setWeatherCustom] = useState('');
   const [story, setStory] = useState('');
   const [photos, setPhotos] = useState<PhotoEntry[]>([]);
@@ -90,25 +94,28 @@ export default function CreateAlbumScreen() {
         // ISO 날짜를 YYYY-MM-DD로 변환
         setDate(album.date.includes('T') ? album.date.split('T')[0] : album.date);
         setDateEnd(album.dateEnd ? (album.dateEnd.includes('T') ? album.dateEnd.split('T')[0] : album.dateEnd) : undefined);
+        setAlbumType(album.albumType ?? 'album');
         setLocation(album.location); setStory(album.story); setPhotos(album.photos);
-        const w = WEATHER_OPTIONS.find(o => o.type === album.weather) ?? WEATHER_OPTIONS[0];
-        setWeather(w);
+        const wList = album.weatherList ?? (album.weather ? [album.weather as WeatherType] : []);
+        const wOptions = wList.map(t => WEATHER_OPTIONS.find(o => o.type === t)).filter((o): o is WeatherOption => !!o);
+        setSelectedWeathers(wOptions);
         if (album.weatherCustom) setWeatherCustom(album.weatherCustom);
       });
     }
   }, [albumId]);
 
+  const maxPhotos = albumType === 'diary' ? MAX_PHOTOS_DIARY : MAX_PHOTOS_ALBUM;
+
   /* ── 사진 추가 (EXIF 날짜 자동 적용) ─────────────── */
   const applyPhotosWithExif = (newPhotos: PhotoEntry[], allPhotos: PhotoEntry[]) => {
-    // 30장 초과 시 잘라내기
-    const remaining = MAX_PHOTOS - allPhotos.length;
+    const remaining = maxPhotos - allPhotos.length;
     const toAdd = newPhotos.slice(0, remaining);
     const merged = [...allPhotos, ...toAdd];
     setPhotos(merged);
     if (toAdd.length < newPhotos.length) {
       Alert.alert(
         '사진 수 제한',
-        `앨범당 최대 ${MAX_PHOTOS}장까지 저장할 수 있어요.\n${newPhotos.length - toAdd.length}장이 제외되었습니다.`
+        `앨범당 최대 ${maxPhotos}장까지 저장할 수 있어요.\n${newPhotos.length - toAdd.length}장이 제외되었습니다.`
       );
     }
     const hasExif = merged.some(p => p.takenAt);
@@ -119,18 +126,15 @@ export default function CreateAlbumScreen() {
   };
 
   const pickImages = () => {
-    // 이미 30장이면 차단
-    if (photos.length >= MAX_PHOTOS) {
-      Alert.alert('사진 수 제한', `앨범당 최대 ${MAX_PHOTOS}장까지 저장할 수 있어요.`);
+    if (photos.length >= maxPhotos) {
+      Alert.alert('사진 수 제한', `앨범당 최대 ${maxPhotos}장까지 저장할 수 있어요.`);
       return;
     }
-    // Modal 닫기 애니메이션(200ms) 완료 후 ImagePicker 실행
-    // (Modal이 완전히 닫히기 전에 다른 네이티브 뷰를 열면 iOS에서 크래시 발생)
     hidePhotoSheet();
     setTimeout(async () => {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') { Alert.alert('권한 필요', '사진 앨범 접근 권한이 필요합니다.'); return; }
-      const canAdd = MAX_PHOTOS - photos.length;
+      const canAdd = maxPhotos - photos.length;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'], allowsMultipleSelection: true,
         quality: 0.75, selectionLimit: canAdd, exif: true,
@@ -143,13 +147,12 @@ export default function CreateAlbumScreen() {
         }));
         applyPhotosWithExif(newPhotos, photos);
       }
-    }, 300); // Modal 완전히 닫힌 후 실행
+    }, 300);
   };
 
   const takePhoto = () => {
-    // 이미 30장이면 차단
-    if (photos.length >= MAX_PHOTOS) {
-      Alert.alert('사진 수 제한', `앨범당 최대 ${MAX_PHOTOS}장까지 저장할 수 있어요.`);
+    if (photos.length >= maxPhotos) {
+      Alert.alert('사진 수 제한', `앨범당 최대 ${maxPhotos}장까지 저장할 수 있어요.`);
       return;
     }
     // Modal 닫기 애니메이션(200ms) 완료 후 ImagePicker 실행
@@ -235,9 +238,12 @@ export default function CreateAlbumScreen() {
       const album: Album = {
         id: albumIdFinal, childId, title: title.trim(), date, dateEnd,
         location: location.trim(),
-        weather: weather.type, weatherEmoji: weather.emoji,
-        weatherCustom: weather.type === 'other' ? weatherCustom.trim() : undefined,
+        weather: (selectedWeathers[0]?.type ?? '') as WeatherType | '',
+        weatherEmoji: selectedWeathers.map(w => w.emoji).join(' '),
+        weatherCustom: selectedWeathers.some(w => w.type === 'other') ? weatherCustom.trim() : undefined,
+        weatherList: selectedWeathers.map(w => w.type) as WeatherType[],
         story: story.trim(), photos: savedPhotos,
+        albumType,
         createdAt: now, updatedAt: now,
       };
       await upsertAlbum(album);
@@ -273,8 +279,38 @@ export default function CreateAlbumScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
+          {/* ── 앨범 유형 선택 ── */}
+          <Text style={styles.label}>앨범 유형 *</Text>
+          <View style={styles.typeRow}>
+            {([
+              { type: 'diary' as AlbumType, icon: '📔', title: '일기형', desc: '하루의 이야기를 기록해요', limit: '사진 최대 6장' },
+              { type: 'album' as AlbumType, icon: '📷', title: '앨범형', desc: '추억을 모아 엮어요', limit: '사진 최대 30장' },
+            ] as const).map(item => {
+              const active = albumType === item.type;
+              const disabled = isEdit;
+              return (
+                <TouchableOpacity
+                  key={item.type}
+                  style={[styles.typeCard, active && styles.typeCardActive, disabled && styles.typeCardDisabled]}
+                  onPress={() => { if (!disabled) setAlbumType(item.type); }}
+                  activeOpacity={disabled ? 1 : 0.75}
+                >
+                  <Text style={styles.typeIcon}>{item.icon}</Text>
+                  <Text style={[styles.typeTitle, active && styles.typeTitleActive]}>{item.title}</Text>
+                  <Text style={[styles.typeDesc, active && styles.typeDescActive]}>{item.desc}</Text>
+                  <View style={[styles.typeLimitBadge, active && styles.typeLimitBadgeActive]}>
+                    <Text style={[styles.typeLimitText, active && styles.typeLimitTextActive]}>{item.limit}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {isEdit && (
+            <Text style={styles.typeEditNote}>앨범 유형은 생성 후 변경할 수 없어요</Text>
+          )}
+
           {/* ── 제목 ── */}
-          <Text style={styles.label}>앨범 제목 *</Text>
+          <Text style={[styles.label, { marginTop: 20 }]}>앨범 제목 *</Text>
           <TextInput
             style={styles.input}
             placeholder="예: 첫 돌잔치, 가족 여행"
@@ -338,22 +374,37 @@ export default function CreateAlbumScreen() {
           </View>
 
           {/* ── 날씨 ── */}
-          <Text style={[styles.label, { marginTop: 20 }]}>날씨</Text>
-          <View style={styles.weatherGrid}>
-            {WEATHER_OPTIONS.map(w => (
-              <TouchableOpacity
-                key={w.type}
-                style={[styles.weatherChip, weather.type === w.type && styles.weatherChipActive]}
-                onPress={() => { Keyboard.dismiss(); setWeather(w); }}
-              >
-                <Text style={styles.weatherEmoji}>{w.emoji}</Text>
-                <Text style={[styles.weatherLabel, weather.type === w.type && styles.weatherLabelActive]}>
-                  {w.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 20, marginBottom: 4 }}>
+            <Text style={styles.label}>날씨</Text>
+            <Text style={{ fontSize: 12, color: COLORS.textMuted, marginLeft: 8 }}>
+              최대 3개 ({selectedWeathers.length}/3)
+            </Text>
           </View>
-          {weather.type === 'other' && (
+          <View style={styles.weatherGrid}>
+            {WEATHER_OPTIONS.map(w => {
+              const isActive = selectedWeathers.some(s => s.type === w.type);
+              return (
+                <TouchableOpacity
+                  key={w.type}
+                  style={[styles.weatherChip, isActive && styles.weatherChipActive]}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setSelectedWeathers(prev => {
+                      if (prev.some(p => p.type === w.type)) return prev.filter(p => p.type !== w.type);
+                      if (prev.length >= 3) return prev;
+                      return [...prev, w];
+                    });
+                  }}
+                >
+                  <Text style={styles.weatherEmoji}>{w.emoji}</Text>
+                  <Text style={[styles.weatherLabel, isActive && styles.weatherLabelActive]}>
+                    {w.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {selectedWeathers.some(w => w.type === 'other') && (
             <TextInput
               style={[styles.input, { marginTop: 8 }]}
               placeholder="날씨를 직접 입력하세요 (예: 따뜻한 봄날)"
@@ -370,29 +421,29 @@ export default function CreateAlbumScreen() {
             placeholder="이 날의 추억을 적어보세요..."
             placeholderTextColor={COLORS.textMuted}
             value={story} onChangeText={setStory}
-            multiline textAlignVertical="top" maxLength={1000}
+            multiline textAlignVertical="top" maxLength={500}
           />
-          <Text style={styles.charCount}>{story.length}/1000</Text>
+          <Text style={styles.charCount}>{story.length}/500</Text>
 
           {/* ── 사진 추가 (피그마 PhotoUploader 스타일) ── */}
           <Text style={[styles.label, { marginTop: 20 }]}>사진</Text>
           <TouchableOpacity
-            style={[styles.photoUploaderBox, photos.length >= MAX_PHOTOS && styles.photoUploaderBoxFull]}
+            style={[styles.photoUploaderBox, photos.length >= maxPhotos && styles.photoUploaderBoxFull]}
             onPress={showPhotoSheet}
           >
             <Ionicons
-              name={photos.length >= MAX_PHOTOS ? 'close-circle-outline' : 'images-outline'}
+              name={photos.length >= maxPhotos ? 'close-circle-outline' : 'images-outline'}
               size={44}
-              color={photos.length >= MAX_PHOTOS ? COLORS.textMuted : COLORS.purple}
+              color={photos.length >= maxPhotos ? COLORS.textMuted : COLORS.purple}
               style={{ marginBottom: 8 }}
             />
             <Text style={styles.photoUploaderTitle}>
-              {photos.length >= MAX_PHOTOS ? '사진이 가득 찼어요' : '사진 추가하기'}
+              {photos.length >= maxPhotos ? '사진이 가득 찼어요' : '사진 추가하기'}
             </Text>
             <Text style={styles.photoUploaderSub}>
-              {photos.length >= MAX_PHOTOS
-                ? `최대 ${MAX_PHOTOS}장 저장 완료`
-                : `${photos.length}/${MAX_PHOTOS}장 · 여러 장 선택 가능`}
+              {photos.length >= maxPhotos
+                ? `최대 ${maxPhotos}장 저장 완료`
+                : `${photos.length}/${maxPhotos}장 · 여러 장 선택 가능`}
             </Text>
           </TouchableOpacity>
 
@@ -402,32 +453,34 @@ export default function CreateAlbumScreen() {
               <Text style={styles.photoListTitle}>등록된 사진 ({photos.length}장)</Text>
               {photos.map((photo, idx) => (
                 <View key={photo.id} style={styles.photoCard}>
-                  <Image source={{ uri: photo.uri }} style={styles.photoImg} />
-                  <View style={styles.photoNum}><Text style={styles.photoNumText}>{idx + 1}</Text></View>
-                  <TouchableOpacity style={styles.photoDelete}
-                    onPress={() => Alert.alert('삭제', '이 사진을 삭제할까요?', [
-                      { text: '취소', style: 'cancel' },
-                      { text: '삭제', style: 'destructive', onPress: () => {
-                        const updated = photos.filter(p => p.id !== photo.id);
-                        setPhotos(updated);
-                        if (updated.some(p => p.takenAt)) {
-                          const { date: d, dateEnd: de } = calcDateRange(updated);
-                          setDate(d); setDateEnd(de);
-                        } else if (updated.length === 0) {
-                          setDate(getTodayISO()); setDateEnd(undefined); setExifApplied(false);
-                        }
-                      }},
-                    ])}>
-                    <Ionicons name="close" size={16} color="#fff" />
-                  </TouchableOpacity>
-                  {photo.takenAt && (
-                    <View style={styles.photoExifBadge}>
-                      <Ionicons name="calendar-outline" size={11} color="#fff" style={{ marginRight: 3 }} />
-                      <Text style={styles.photoExifText}>
-                        {new Date(photo.takenAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </Text>
-                    </View>
-                  )}
+                  {/* 이미지 영역 — 날짜/번호/삭제 버튼을 이미지에 고정 */}
+                  <View style={{ position: 'relative' }}>
+                    <Image source={{ uri: photo.uri }} style={styles.photoImg} />
+                    <View style={styles.photoNum}><Text style={styles.photoNumText}>{idx + 1}</Text></View>
+                    <TouchableOpacity style={styles.photoDelete}
+                      onPress={() => Alert.alert('삭제', '이 사진을 삭제할까요?', [
+                        { text: '취소', style: 'cancel' },
+                        { text: '삭제', style: 'destructive', onPress: () => {
+                          const updated = photos.filter(p => p.id !== photo.id);
+                          setPhotos(updated);
+                          if (updated.some(p => p.takenAt)) {
+                            const { date: d, dateEnd: de } = calcDateRange(updated);
+                            setDate(d); setDateEnd(de);
+                          } else if (updated.length === 0) {
+                            setDate(getTodayISO()); setDateEnd(undefined); setExifApplied(false);
+                          }
+                        }},
+                      ])}>
+                      <Ionicons name="close" size={16} color="#fff" />
+                    </TouchableOpacity>
+                    {photo.takenAt && (
+                      <View style={styles.photoExifBadge}>
+                        <Ionicons name="calendar-outline" size={10} color="#fff" style={{ marginRight: 3 }} />
+                        <Text style={styles.photoExifText}>{formatPhotoDateTime(photo.takenAt)}</Text>
+                      </View>
+                    )}
+                  </View>
+                  {/* 캡션 영역 — 이미지 아래 */}
                   <TouchableOpacity style={styles.captionBtn}
                     onPress={() => setCaptionModal({ visible: true, photoId: photo.id, text: photo.caption })}>
                     {photo.caption
@@ -505,7 +558,7 @@ export default function CreateAlbumScreen() {
       <Modal visible={captionModal.visible} transparent animationType="slide"
         onRequestClose={() => setCaptionModal({ ...captionModal, visible: false })}>
         <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalBox}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.modalBox, { paddingBottom: insets.bottom }]}>
             <View style={styles.modalTitleRow}>
               <Ionicons name="create-outline" size={20} color={COLORS.text} style={{ marginRight: 8 }} />
               <Text style={styles.modalTitle}>사진 캡션</Text>
@@ -516,9 +569,9 @@ export default function CreateAlbumScreen() {
               placeholderTextColor={COLORS.textMuted}
               value={captionModal.text}
               onChangeText={t => setCaptionModal({ ...captionModal, text: t })}
-              multiline autoFocus maxLength={200}
+              multiline autoFocus maxLength={100}
             />
-            <Text style={styles.charCount}>{captionModal.text.length}/200</Text>
+            <Text style={styles.charCount}>{captionModal.text.length}/100</Text>
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel}
                 onPress={() => setCaptionModal({ ...captionModal, visible: false })}>
@@ -554,6 +607,27 @@ const styles = StyleSheet.create({
   headerDoneText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   body: { padding: 20, paddingBottom: 60, backgroundColor: '#fff' },
   label: { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 8 },
+  /* 앨범 유형 */
+  typeRow: { flexDirection: 'row', gap: 12, marginBottom: 4 },
+  typeCard: {
+    flex: 1, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 8,
+    borderRadius: 20, borderWidth: 2, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB',
+  },
+  typeCardActive: { borderColor: COLORS.purple, backgroundColor: COLORS.purplePastel },
+  typeCardDisabled: { opacity: 0.6 },
+  typeIcon: { fontSize: 28, marginBottom: 6 },
+  typeTitle: { fontSize: 15, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 4 },
+  typeTitleActive: { color: COLORS.purple },
+  typeDesc: { fontSize: 11, color: COLORS.textMuted, textAlign: 'center', marginBottom: 8 },
+  typeDescActive: { color: COLORS.purple + 'bb' },
+  typeLimitBadge: {
+    backgroundColor: '#E5E7EB', borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 3,
+  },
+  typeLimitBadgeActive: { backgroundColor: COLORS.purple + '22' },
+  typeLimitText: { fontSize: 11, fontWeight: '600', color: COLORS.textSecondary },
+  typeLimitTextActive: { color: COLORS.purple },
+  typeEditNote: { fontSize: 11, color: COLORS.textMuted, marginBottom: 4, marginTop: 6 },
   input: {
     backgroundColor: '#fff', borderRadius: 12, borderWidth: 2, borderColor: '#E5E7EB',
     paddingHorizontal: 16, paddingVertical: 13, fontSize: 15, color: COLORS.text,
@@ -615,12 +689,12 @@ const styles = StyleSheet.create({
     borderRadius: 16, backgroundColor: COLORS.danger, alignItems: 'center', justifyContent: 'center',
   },
   photoExifBadge: {
-    position: 'absolute', bottom: 64, left: 10,
+    position: 'absolute', bottom: 8, left: 8,
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12,
-    paddingHorizontal: 10, paddingVertical: 4,
+    backgroundColor: 'rgba(0,0,0,0.52)', borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 4,
   },
-  photoExifText: { color: '#fff', fontSize: 11, fontWeight: '500' },
+  photoExifText: { color: '#fff', fontSize: 10, fontWeight: '500' },
   captionBtn: {
     flexDirection: 'row', alignItems: 'center',
     margin: 12, alignSelf: 'flex-start',
@@ -668,7 +742,7 @@ const styles = StyleSheet.create({
   sheetRowSub: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   /* 모달 */
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalBox: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 36 },
+  modalBox: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
   modalTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
   modalInput: {
@@ -676,7 +750,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: COLORS.text,
     minHeight: 100, textAlignVertical: 'top',
   },
-  modalActions: { flexDirection: 'row', gap: 12, marginTop: 16 },
+  modalActions: { flexDirection: 'row', gap: 12, marginTop: 16, marginBottom: 24 },
   modalCancel: { flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 2, borderColor: '#E5E7EB', alignItems: 'center' },
   modalSave: { flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: COLORS.purple, alignItems: 'center' },
 });

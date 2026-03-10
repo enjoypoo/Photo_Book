@@ -9,11 +9,42 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Child, GroupType, RootStackParamList } from '../types';
-import { loadChildren, deleteChild, loadAlbumsByChild } from '../store/albumStore';
+import SortableList, { DragHandleProps } from '../components/SortableList';
+import { loadChildrenOrdered, deleteChild, loadAlbumsByChild, saveChildrenOrder, toggleChildFavorite } from '../store/albumStore';
 import { COLORS } from '../constants';
 import { TAB_BAR_HEIGHT } from '../../App';
+import BannerAdItem from '../components/BannerAdItem';
+
+const Logo = require('../../assets/Logo.png');
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
+
+/* ── 그룹 목록 + 배너 광고 인터리빙 ──────────────────
+   10개 단위 그룹마다 광고 1개를 그룹 내 랜덤 위치에 삽입
+   (1개뿐인 경우에도 광고 1개 삽입)
+─────────────────────────────────────────────────── */
+type ListItem =
+  | { type: 'child'; child: Child }
+  | { type: 'ad'; id: number };
+
+function buildListData(children: Child[]): ListItem[] {
+  if (children.length === 0) return [];
+  const result: ListItem[] = [];
+  let adIdx = 0;
+  const n = children.length;
+
+  for (let groupStart = 0; groupStart < n; groupStart += 10) {
+    const groupEnd = Math.min(groupStart + 10, n);
+    const groupSize = groupEnd - groupStart;
+    // 그룹 내 랜덤 위치(1번째 항목 이후~마지막 항목 이후 사이) 에 광고 삽입
+    const adPos = 1 + Math.floor(Math.random() * groupSize);
+    for (let i = 0; i < groupSize; i++) {
+      result.push({ type: 'child', child: children[groupStart + i] });
+      if (i + 1 === adPos) result.push({ type: 'ad', id: adIdx++ });
+    }
+  }
+  return result;
+}
 const { width } = Dimensions.get('window');
 
 const GROUP_LABEL: Record<GroupType, string> = {
@@ -25,25 +56,41 @@ const GROUP_EMOJI: Record<GroupType, string> = {
   work: '💼', club: '🎉', other: '🌟',
 };
 
+const CHILD_CARD_HEIGHT = 116; // card padding(16*2) + avatar(72) + marginBottom(12)
+
+function sortFavoritesFirst<T extends { isFavorite?: boolean }>(list: T[]): T[] {
+  return [...list.filter(x => x.isFavorite), ...list.filter(x => !x.isFavorite)];
+}
+
 export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const [children, setChildren] = useState<Child[]>([]);
   const [albumCounts, setAlbumCounts] = useState<Record<string, number>>({});
-
-  // PDF 선택 모드
-  const [pdfMode, setPdfMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [exporting, setExporting] = useState(false);
+  const [sortMode, setSortMode] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
+  const listRef = useRef<FlatList<ListItem>>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const scrollTopAnim = useRef(new Animated.Value(0)).current;
+  const scrollTopPrevRef = useRef(false);
+
+  const handleScroll = useCallback((event: any) => {
+    const y = event.nativeEvent.contentOffset.y;
+    const show = y > 300;
+    if (show !== scrollTopPrevRef.current) {
+      scrollTopPrevRef.current = show;
+      setShowScrollTop(show);
+      Animated.timing(scrollTopAnim, { toValue: show ? 1 : 0, duration: 200, useNativeDriver: true }).start();
+    }
+  }, [scrollTopAnim]);
+
   useFocusEffect(useCallback(() => {
+    setSortMode(false);
     fadeAnim.setValue(0); slideAnim.setValue(20);
-    setPdfMode(false);
-    setSelectedIds(new Set());
-    loadChildren().then(async (list) => {
-      setChildren(list);
+    loadChildrenOrdered().then(async (list) => {
+      setChildren(sortFavoritesFirst(list));
       const counts: Record<string, number> = {};
       for (const c of list) {
         const albums = await loadAlbumsByChild(c.id);
@@ -57,6 +104,13 @@ export default function HomeScreen() {
     });
   }, []));
 
+  const handleFavoriteToggle = async (child: Child) => {
+    await toggleChildFavorite(child.id);
+    setChildren(prev =>
+      sortFavoritesFirst(prev.map(c => c.id === child.id ? { ...c, isFavorite: !c.isFavorite } : c))
+    );
+  };
+
   const handleDeleteChild = (child: Child) => {
     Alert.alert('삭제', `"${child.name}" 그룹을 삭제할까요?\n모든 사진과 앨범이 삭제됩니다.`, [
       { text: '취소', style: 'cancel' },
@@ -69,44 +123,6 @@ export default function HomeScreen() {
     ]);
   };
 
-  // PDF 선택 토글
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  // PDF 내보내기 실행
-  const handleExportPDF = async () => {
-    if (selectedIds.size === 0) {
-      Alert.alert('알림', 'PDF로 내보낼 그룹을 선택해주세요.');
-      return;
-    }
-    setExporting(true);
-    try {
-      const albumIds: string[] = [];
-      for (const childId of selectedIds) {
-        const albums = await loadAlbumsByChild(childId);
-        albums.forEach(a => albumIds.push(a.id));
-      }
-      if (albumIds.length === 0) {
-        Alert.alert('알림', '선택한 그룹에 앨범이 없습니다.');
-        setExporting(false);
-        return;
-      }
-      setPdfMode(false);
-      setSelectedIds(new Set());
-      navigation.navigate('ExportPDF', { albumIds });
-    } catch (e) {
-      Alert.alert('오류', 'PDF 준비 중 오류가 발생했습니다.');
-    } finally {
-      setExporting(false);
-    }
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
@@ -117,65 +133,42 @@ export default function HomeScreen() {
         style={styles.header}
       >
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>우리 추억 앨범</Text>
-          <Text style={styles.headerSub}>소중한 순간을 기록해요</Text>
+          <Image source={Logo} style={styles.headerLogo} resizeMode="contain" />
         </View>
 
-        {pdfMode ? (
-          /* PDF 선택 모드 헤더 버튼 */
-          <View style={styles.headerActions}>
+        <View style={styles.headerActions}>
+          {children.length > 0 && (
             <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={() => { setPdfMode(false); setSelectedIds(new Set()); }}
+              style={[styles.sortBtn, sortMode && styles.sortBtnActive]}
+              onPress={async () => {
+                if (sortMode) {
+                  await saveChildrenOrder(children.map(c => c.id));
+                }
+                setSortMode(v => !v);
+              }}
               activeOpacity={0.8}
             >
-              <Text style={styles.cancelBtnText}>취소</Text>
+              {sortMode ? (
+                <Text style={styles.sortBtnDoneText}>완료</Text>
+              ) : (
+                <Ionicons name="reorder-three-outline" size={22} color={COLORS.purple} />
+              )}
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.exportConfirmBtn, selectedIds.size === 0 && styles.exportConfirmBtnDisabled]}
-              onPress={handleExportPDF}
-              disabled={exporting}
-              activeOpacity={0.85}
+          )}
+          <TouchableOpacity
+            style={styles.addBtnWrap}
+            onPress={() => navigation.navigate('CreateChild', {})}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={[COLORS.gradientStart, COLORS.gradientEnd]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={styles.addBtn}
             >
-              <LinearGradient
-                colors={selectedIds.size > 0 ? [COLORS.gradientStart, COLORS.gradientEnd] : ['#D1D5DB', '#D1D5DB']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={styles.exportConfirmGrad}
-              >
-                <Text style={styles.exportConfirmText}>
-                  {exporting ? '준비 중...' : `PDF 내보내기 ${selectedIds.size > 0 ? `(${selectedIds.size})` : ''}`}
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          /* 일반 모드 헤더 버튼 */
-          <View style={styles.headerActions}>
-            {children.length > 0 && (
-              <TouchableOpacity
-                style={styles.pdfIconBtn}
-                onPress={() => setPdfMode(true)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="document-text-outline" size={15} color="#fff" style={{ marginRight: 5 }} />
-                <Text style={styles.pdfIconText}>PDF</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.addBtnWrap}
-              onPress={() => navigation.navigate('CreateChild', {})}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={[COLORS.gradientStart, COLORS.gradientEnd]}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={styles.addBtn}
-              >
-                <Ionicons name="add" size={28} color="#fff" />
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        )}
+              <Ionicons name="add" size={28} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
       </LinearGradient>
 
       {/* ── 배경 ── */}
@@ -184,14 +177,6 @@ export default function HomeScreen() {
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
-
-      {/* PDF 선택 모드 안내 배너 */}
-      {pdfMode && (
-        <View style={styles.pdfBanner}>
-          <Ionicons name="document-text-outline" size={15} color={COLORS.purple} style={{ marginRight: 6 }} />
-          <Text style={styles.pdfBannerText}>PDF로 내보낼 그룹을 선택하세요</Text>
-        </View>
-      )}
 
       {children.length === 0 ? (
         /* ── 빈 상태 ── */
@@ -215,36 +200,68 @@ export default function HomeScreen() {
             </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
+      ) : sortMode ? (
+        <>
+          {/* 정렬 모드 힌트 바 */}
+          <View style={styles.sortHintBar}>
+            <Ionicons name="reorder-three-outline" size={16} color={COLORS.purple} style={{ marginRight: 6 }} />
+            <Text style={styles.sortHintText}>길게 누르고 드래그하여 순서를 변경하세요</Text>
+          </View>
+          <SortableList
+            data={children}
+            keyExtractor={c => c.id}
+            itemHeight={CHILD_CARD_HEIGHT}
+            onOrderChange={newChildren => setChildren(newChildren)}
+            contentContainerStyle={[styles.list, { paddingBottom: TAB_BAR_HEIGHT + 16 }]}
+            ListHeaderComponent={
+              <View style={styles.listHeader}>
+                <Text style={styles.listHeaderText}>그룹 목록</Text>
+                <Text style={styles.listHeaderCount}>{children.length}개</Text>
+              </View>
+            }
+            renderItem={(child, index, isDragging, handle) => (
+              <ChildCard
+                item={child}
+                albumCount={albumCounts[child.id] ?? 0}
+                index={index}
+                sortMode
+                isDragging={isDragging}
+                dragHandleProps={handle}
+                onPress={() => {}}
+                onLongPress={() => {}}
+                onFavoriteToggle={() => handleFavoriteToggle(child)}
+              />
+            )}
+          />
+        </>
       ) : (
         <FlatList
-          data={children}
-          keyExtractor={item => item.id}
+          ref={listRef}
+          data={buildListData(children)}
+          keyExtractor={item => item.type === 'ad' ? `ad-${item.id}` : item.child.id}
           contentContainerStyle={[styles.list, { paddingBottom: TAB_BAR_HEIGHT + 16 }]}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item, index }) => (
-            <ChildCard
-              item={item}
-              albumCount={albumCounts[item.id] ?? 0}
-              index={index}
-              pdfMode={pdfMode}
-              selected={selectedIds.has(item.id)}
-              onPress={() => {
-                if (pdfMode) {
-                  toggleSelect(item.id);
-                } else {
-                  navigation.navigate('AlbumList', { childId: item.id });
-                }
-              }}
-              onLongPress={() => {
-                if (pdfMode) return;
-                Alert.alert(item.name, '무엇을 할까요?', [
-                  { text: '수정', onPress: () => navigation.navigate('CreateChild', { childId: item.id }) },
-                  { text: '삭제', style: 'destructive', onPress: () => handleDeleteChild(item) },
-                  { text: '취소', style: 'cancel' },
-                ]);
-              }}
-            />
-          )}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          renderItem={({ item, index }) => {
+            if (item.type === 'ad') return <BannerAdItem />;
+            return (
+              <ChildCard
+                item={item.child}
+                albumCount={albumCounts[item.child.id] ?? 0}
+                index={index}
+                onPress={() => navigation.navigate('AlbumList', { childId: item.child.id })}
+                onLongPress={() => {
+                  Alert.alert(item.child.name, '무엇을 할까요?', [
+                    { text: '수정', onPress: () => navigation.navigate('CreateChild', { childId: item.child.id }) },
+                    { text: '삭제', style: 'destructive', onPress: () => handleDeleteChild(item.child) },
+                    { text: '취소', style: 'cancel' },
+                  ]);
+                }}
+                onFavoriteToggle={() => handleFavoriteToggle(item.child)}
+              />
+            );
+          }}
           ListHeaderComponent={
             <View style={styles.listHeader}>
               <Text style={styles.listHeaderText}>그룹 목록</Text>
@@ -253,6 +270,23 @@ export default function HomeScreen() {
           }
         />
       )}
+      {/* 맨위로 버튼 */}
+      <Animated.View
+        pointerEvents={showScrollTop ? 'auto' : 'none'}
+        style={[styles.scrollTopBtn, {
+          opacity: scrollTopAnim,
+          transform: [{ scale: scrollTopAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }],
+          bottom: TAB_BAR_HEIGHT + 16,
+        }]}
+      >
+        <TouchableOpacity
+          onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
+          style={styles.scrollTopBtnInner}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="chevron-up" size={22} color="#fff" />
+        </TouchableOpacity>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -262,18 +296,21 @@ interface CardProps {
   item: Child;
   albumCount: number;
   index: number;
-  pdfMode: boolean;
-  selected: boolean;
+  sortMode?: boolean;
+  isDragging?: boolean;
+  dragHandleProps?: DragHandleProps;
   onPress: () => void;
   onLongPress: () => void;
+  onFavoriteToggle: () => void;
 }
-function ChildCard({ item, albumCount, index, pdfMode, selected, onPress, onLongPress }: CardProps) {
-  const anim = useRef(new Animated.Value(0)).current;
+function ChildCard({ item, albumCount, index, sortMode, isDragging, dragHandleProps, onPress, onLongPress, onFavoriteToggle }: CardProps) {
+  const anim = useRef(new Animated.Value(sortMode ? 1 : 0)).current;
   React.useEffect(() => {
+    if (sortMode) return;
     Animated.timing(anim, {
       toValue: 1, duration: 380, delay: index * 70, useNativeDriver: true,
     }).start();
-  }, []);
+  }, [sortMode]);
   const slideY = anim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] });
 
   const groupLabel = item.groupType === 'other' && item.groupTypeCustom
@@ -281,68 +318,82 @@ function ChildCard({ item, albumCount, index, pdfMode, selected, onPress, onLong
     : GROUP_LABEL[item.groupType] ?? '그룹';
   const groupEmoji = GROUP_EMOJI[item.groupType] ?? '🌟';
 
-  return (
-    <Animated.View style={{ opacity: anim, transform: [{ translateY: slideY }] }}>
-      <TouchableOpacity
-        style={[
-          styles.card,
-          { backgroundColor: item.color + '12' },
-          selected && styles.cardSelected,
-          selected && { borderColor: item.color, borderWidth: 2 },
-        ]}
-        onPress={onPress}
-        onLongPress={onLongPress}
-        activeOpacity={0.82}
-      >
-        {/* PDF 선택 체크박스 */}
-        {pdfMode && (
-          <View style={[
-            styles.checkbox,
-            { borderColor: item.color },
-            selected && { backgroundColor: item.color },
-          ]}>
-            {selected && <Ionicons name="checkmark" size={14} color="#fff" />}
+  const cardInner = (
+    <>
+      {/* 왼쪽: 아바타 */}
+      <View style={styles.cardLeft}>
+        {item.photoUri ? (
+          <Image source={{ uri: item.photoUri }} style={styles.avatarImg} />
+        ) : (
+          <View style={[styles.emojiBox, { backgroundColor: item.color + '28' }]}>
+            <Text style={styles.emojiText}>{item.emoji}</Text>
           </View>
         )}
+        {/* 색상 점 */}
+        <View style={[styles.colorDot, { backgroundColor: item.color }]} />
+      </View>
 
-        {/* 왼쪽: 아바타 */}
-        <View style={styles.cardLeft}>
-          {item.photoUri ? (
-            <Image source={{ uri: item.photoUri }} style={styles.avatarImg} />
-          ) : (
-            <View style={[styles.emojiBox, { backgroundColor: item.color + '28' }]}>
-              <Text style={styles.emojiText}>{item.emoji}</Text>
-            </View>
-          )}
-          {/* 색상 점 */}
-          <View style={[styles.colorDot, { backgroundColor: item.color }]} />
-        </View>
-
-        {/* 오른쪽: 정보 */}
-        <View style={styles.cardInfo}>
-          <View style={styles.cardRow}>
-            <Text style={styles.childName} numberOfLines={1}>{item.name}</Text>
-            <View style={[styles.groupBadge, { backgroundColor: item.color + '20', borderColor: item.color + '60' }]}>
-              <Text style={[styles.groupBadgeText, { color: item.color }]}>{groupEmoji} {groupLabel}</Text>
-            </View>
+      {/* 오른쪽: 정보 */}
+      <View style={styles.cardInfo}>
+        <View style={styles.cardRow}>
+          <Text style={styles.childName} numberOfLines={1}>{item.name}</Text>
+          <View style={[styles.groupBadge, { backgroundColor: item.color + '20', borderColor: item.color + '60' }]}>
+            <Text style={[styles.groupBadgeText, { color: item.color }]}>{groupEmoji} {groupLabel}</Text>
           </View>
-          <View style={styles.cardMeta}>
-            {item.birthDate ? (
-              <View style={styles.metaRow}>
-                <Ionicons name="calendar-outline" size={13} color={COLORS.textSecondary} style={{ marginRight: 4 }} />
-                <Text style={styles.metaItem}>{item.birthDate}</Text>
-              </View>
-            ) : null}
+        </View>
+        <View style={styles.cardMeta}>
+          {item.birthDate ? (
             <View style={styles.metaRow}>
-              <Ionicons name="camera-outline" size={13} color={COLORS.purple} style={{ marginRight: 4 }} />
-              <Text style={[styles.metaItem, styles.albumCountText]}>{albumCount}개의 앨범</Text>
+              <Ionicons name="calendar-outline" size={13} color={COLORS.textSecondary} style={{ marginRight: 4 }} />
+              <Text style={styles.metaItem}>{item.birthDate}</Text>
             </View>
+          ) : null}
+          <View style={styles.metaRow}>
+            <Ionicons name="camera-outline" size={13} color={COLORS.purple} style={{ marginRight: 4 }} />
+            <Text style={[styles.metaItem, styles.albumCountText]}>{albumCount}개의 앨범</Text>
           </View>
         </View>
+      </View>
 
-        {/* 화살표 or 체크 여백 */}
-        {!pdfMode && <Ionicons name="chevron-forward" size={22} color={COLORS.textMuted} style={{ marginLeft: 8 }} />}
+      {/* 즐겨찾기 하트 버튼 */}
+      <TouchableOpacity
+        onPress={onFavoriteToggle}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        style={styles.heartBtn}
+      >
+        <Ionicons
+          name={item.isFavorite ? 'heart' : 'heart-outline'}
+          size={20}
+          color={item.isFavorite ? '#EF4444' : COLORS.textMuted}
+        />
       </TouchableOpacity>
+
+      {sortMode ? (
+        <View
+          {...(dragHandleProps?.panHandlers ?? {})}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          style={styles.dragHandle}
+        >
+          <Ionicons name="reorder-three-outline" size={28} color={COLORS.textMuted} />
+        </View>
+      ) : (
+        <Ionicons name="chevron-forward" size={22} color={COLORS.textMuted} style={{ marginLeft: 8 }} />
+      )}
+    </>
+  );
+
+  const cardStyle = [styles.card, { backgroundColor: item.color + '12' }, ...(isDragging ? [styles.cardDragging] : [])];
+
+  return (
+    <Animated.View style={{ opacity: anim, transform: [{ translateY: slideY }] }}>
+      {sortMode ? (
+        // 정렬 모드: View 사용 — TouchableOpacity가 PanResponder와 경쟁하지 않도록
+        <View style={cardStyle}>{cardInner}</View>
+      ) : (
+        <TouchableOpacity style={cardStyle} onPress={onPress} onLongPress={onLongPress} activeOpacity={0.82}>
+          {cardInner}
+        </TouchableOpacity>
+      )}
     </Animated.View>
   );
 }
@@ -353,24 +404,13 @@ const styles = StyleSheet.create({
   /* 헤더 */
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    minHeight: 64, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8,
+    minHeight: 64, paddingHorizontal: 5, paddingTop: 1, paddingBottom: 1,
     borderBottomWidth: 1, borderBottomColor: '#F3E8FF',
     zIndex: 10,
   },
-  headerLeft: { flex: 1 },
-  headerTitle: { fontSize: 19, fontWeight: '800', color: COLORS.text },
-  headerSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  headerLeft: { flex: 3 },
+  headerLogo: { width: width * 0.5, height: 60},
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-
-  /* PDF 버튼 - AlbumDetailScreen pdfBtn과 동일한 스타일 */
-  pdfIconBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    height: 36, paddingHorizontal: 14, borderRadius: 18,
-    backgroundColor: COLORS.purple,
-    shadowColor: COLORS.purple, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
-  },
-  pdfIconText: { fontSize: 13, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
 
   /* + 버튼 */
   addBtnWrap: {},
@@ -381,31 +421,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
   },
   addBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-
-  /* PDF 취소 버튼 */
-  cancelBtn: {
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 16, backgroundColor: '#F3F4F6',
-  },
-  cancelBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.text },
-
-  /* PDF 내보내기 확인 버튼 */
-  exportConfirmBtn: { borderRadius: 20, overflow: 'hidden' },
-  exportConfirmBtnDisabled: { opacity: 0.6 },
-  exportConfirmGrad: { paddingHorizontal: 16, paddingVertical: 10 },
-  exportConfirmText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-
-  /* PDF 안내 배너 */
-  pdfBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.purple + '18',
-    paddingVertical: 10, paddingHorizontal: 20,
-    borderBottomWidth: 1, borderBottomColor: COLORS.purple + '30',
-    zIndex: 5,
-  },
-  pdfBannerText: { fontSize: 13, color: COLORS.purple, fontWeight: '600', textAlign: 'center' },
 
   /* 리스트 */
   list: { padding: 16 },
@@ -425,17 +440,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1, shadowRadius: 16, elevation: 4,
     borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.9)',
   },
-  cardSelected: {
-    shadowOpacity: 0.2,
-  },
-
-  /* PDF 선택 체크박스 */
-  checkbox: {
-    width: 24, height: 24, borderRadius: 12, borderWidth: 2,
-    marginRight: 12, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  checkmark: { color: '#fff', fontSize: 14, fontWeight: '700', lineHeight: 18 },
   metaRow: { flexDirection: 'row', alignItems: 'center' },
 
   cardLeft: { marginRight: 14, position: 'relative' },
@@ -465,6 +469,50 @@ const styles = StyleSheet.create({
   metaItem: { fontSize: 13, color: COLORS.textSecondary },
   albumCountText: { color: COLORS.purple, fontWeight: '600' },
   chevron: { fontSize: 22, color: COLORS.textMuted, marginLeft: 8 },
+
+  /* 정렬 버튼 */
+  sortBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(168,85,247,0.1)',
+    borderWidth: 1.5, borderColor: 'rgba(168,85,247,0.2)',
+  },
+  sortBtnActive: {
+    backgroundColor: COLORS.purple,
+    borderColor: COLORS.purple,
+  },
+  sortBtnDoneText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+
+  /* 정렬 힌트 바 */
+  sortHintBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 8, paddingHorizontal: 16,
+    backgroundColor: 'rgba(168,85,247,0.08)',
+    marginHorizontal: 16, marginTop: 8, borderRadius: 12,
+  },
+  sortHintText: { fontSize: 13, color: COLORS.purple, fontWeight: '500' },
+
+  /* 즐겨찾기 하트 버튼 */
+  heartBtn: { marginLeft: 4, padding: 4, alignItems: 'center', justifyContent: 'center' },
+
+  /* 드래그 핸들 */
+  dragHandle: { marginLeft: 4, padding: 4, alignItems: 'center', justifyContent: 'center' },
+  cardDragging: {
+    backgroundColor: 'rgba(168,85,247,0.12)',
+    borderColor: COLORS.purple,
+  },
+
+  /* 맨위로 버튼 */
+  scrollTopBtn: {
+    position: 'absolute', right: 16,
+    shadowColor: COLORS.purple, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 8,
+  },
+  scrollTopBtnInner: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: COLORS.purple,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   /* 빈 상태 */
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },

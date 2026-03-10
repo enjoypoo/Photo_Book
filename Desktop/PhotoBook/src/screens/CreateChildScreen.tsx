@@ -12,17 +12,18 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import uuid from 'react-native-uuid';
 import { Child, GroupType, RootStackParamList } from '../types';
-import { loadChildren, upsertChild } from '../store/albumStore';
+import { loadChildren, upsertChild, isChildNameDuplicate } from '../store/albumStore';
 import { COLORS } from '../constants';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'CreateChild'>;
 type Route = RouteProp<RootStackParamList, 'CreateChild'>;
 
 const EMOJIS = [
-  '👨‍👩‍👧','👫','👦','👧','💼','🎉','🌟','🦋','🌈','🍀',
-  '🎠','🐣','🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼',
-  '🌸','🌺','🌻','🌷','🎂','🎁','🎈','🎀','💎','🏆',
-  '⭐','🌙','☀️','🌈','❤️','💕','💖','🎵','📚','🎮',
+  '📷','📸','🗂️','📔','📚','👨‍👩‍👧','👫','👦','👧','💼',
+  '🎉','🌟','🦋','🌈','🍀','🎠','🐣','🐶','🐱','🐭',
+  '🐹','🐰','🦊','🐻','🐼','🌸','🌺','🌻','🌷','🎂',
+  '🎁','🎈','🎀','💎','🏆','⭐','🌙','☀️','❤️','💕',
+  '💖','🎵','🎮','🎨','🏖️','🚀','🍭','🌍','🎯',
 ];
 const PALETTE = ['#F472B6','#C084FC','#60A5FA','#34D399','#FBBF24','#F87171','#FB923C','#A78BFA'];
 
@@ -120,6 +121,11 @@ export default function CreateChildScreen() {
     if (!name.trim()) { Alert.alert('알림', '그룹명을 입력해주세요.'); return; }
     if (groupType === 'other' && !groupTypeCustom.trim()) {
       Alert.alert('알림', '기타 구분을 입력해주세요.'); return;
+    }
+    const isDuplicate = await isChildNameDuplicate(name.trim(), editId);
+    if (isDuplicate) {
+      Alert.alert('그룹명 중복', `"${name.trim()}" 그룹이 이미 있어요.\n다른 이름을 사용해주세요.`);
+      return;
     }
     const id = editId ?? (uuid.v4() as string);
 

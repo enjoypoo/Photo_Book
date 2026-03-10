@@ -8,7 +8,7 @@
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
+      "resizeMode": "cover",
       "backgroundColor": "#FFF5F7"
     },
     "ios": {
@@ -42,7 +42,14 @@
       "expo-image-picker",
       "expo-location",
       "expo-media-library",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-7158930697867463~2393959815",
+          "iosAppId": "ca-app-pub-7158930697867463~3147474567"
+        }
+      ]
     ]
   }
 }

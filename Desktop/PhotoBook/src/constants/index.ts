@@ -46,6 +46,8 @@ export const WEATHER_OPTIONS: WeatherOption[] = [
 
 export const STORAGE_KEY = '@photobook_v2_albums';
 export const CHILDREN_KEY = '@photobook_v2_children';
+export const CHILDREN_ORDER_KEY = '@photobook_v2_children_order';
+export const ALBUM_ORDER_KEY_PREFIX = '@photobook_v2_album_order_';
 
 export const WEATHER_LABEL: Record<string, string> = {
   sunny: '맑음', partly_cloudy: '구름 조금', cloudy: '흐림',
